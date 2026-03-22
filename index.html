@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html class="h-full" lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>NebulaMind - Interactive 3D Mind Mapping</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              space: {
+                900: '#0a0a0f',
+                800: '#12121e',
+                700: '#1a1a2e',
+              },
+              neon: {
+                blue: '#00d2ff',
+                purple: '#9d50bb',
+                pink: '#ff0080'
+              }
+            },
+            backgroundImage: {
+              'nebula-gradient': 'radial-gradient(circle at 50% 50%, #1a1a2e 0%, #0a0a0f 100%)',
+            }
+          }
+        }
+      }
+    </script>
+    <style data-purpose="global-styles">
+      body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #0a0a0f;
+        color: #ffffff;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      }
+
+      /* Grid Overlay Effect */
+      .grid-overlay {
+        background-image: 
+          linear-gradient(rgba(0, 210, 255, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 210, 255, 0.05) 1px, transparent 1px);
+        background-size: 50px 50px;
+        perspective: 1000px;
+      }
+
+      /* Node animations */
+      .float-animation {
+        animation: float 6s ease-in-out infinite;
+      }
+
+      @keyframes float {
+        0% { transform: translateY(0px) rotate(0deg); }
+        50% { transform: translateY(-20px) rotate(2deg); }
+        100% { transform: translateY(0px) rotate(0deg); }
+      }
+
+      /* Glowing connections */
+      .connection-line {
+        stroke: rgba(0, 210, 255, 0.3);
+        stroke-width: 2;
+        filter: drop-shadow(0 0 5px rgba(0, 210, 255, 0.5));
+        stroke-dasharray: 10;
+        animation: dash 20s linear infinite;
+      }
+
+      @keyframes dash {
+        to { stroke-dashoffset: -1000; }
+      }
+
+      .glass-morphism {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      
+      .selected-node {
+        animation: pulse-glow 1.5s infinite alternate !important;
+        border-color: #00d2ff !important;
+        box-shadow: 0 0 20px rgba(0, 210, 255, 0.6) !important;
+        transform: scale(1.05) !important;
+      }
+      
+      @keyframes pulse-glow {
+        0% { box-shadow: 0 0 10px rgba(0, 210, 255, 0.4); }
+        100% { box-shadow: 0 0 30px rgba(0, 210, 255, 0.8), 0 0 10px rgba(0, 210, 255, 0.5) inset; }
+      }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@^19.2.3",
+        "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+        "react/": "https://esm.sh/react@^19.2.3/",
+        "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
+        "d3": "https://esm.sh/d3@^7.9.0"
+      }
+    }
+    </script>
+    <link rel="stylesheet" href="/index.css">
+  </head>
+  <body class="h-full select-none bg-nebula-gradient">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,72 @@
+{
+  "nodes": [
+    {
+      "id": "core-1",
+      "type": "core",
+      "title": "Core Project",
+      "x": 500,
+      "y": 400
+    },
+    {
+      "id": "img-1",
+      "type": "image",
+      "title": "Visual Concepts v1.2",
+      "url": "https://lh3.googleusercontent.com/aida-public/AB6AXuAj2x5Ews4pBgG7h4nHiLThrYuob8miVR94xy2vgESH2XCntQQCrGub_UyKWJ-5L3ZlADii_51tDN6JWIMY58dk4r8gik80rqutMYLUnvpHmP41Zdu3d8xP4CcoQBl2Tzd4NTxWk6EnGLw2gzZK7KgjZrM4t_uIp1dU6eA974tZO6GgMKjTZSVy1FqFf1T_feq7aCWkhqFXImpIvKqY_-RPA4UvlihapqTuKcE4BUV-0QqkRNUCfrr60_pn9SCN2vXIGxCPwjmkO-Hu",
+      "x": 200,
+      "y": 300
+    },
+    {
+      "id": "vid-1",
+      "type": "video",
+      "title": "3D Animation Techniques",
+      "url": "https://lh3.googleusercontent.com/aida-public/AB6AXuDNNzNeS9UAgaMu3lzrNn2hBmuzm_XOsw17V34-Z3uC8NiwfJ3AEeI9ngWcD8m4Di7__Oqg2-lILYUN7U6yBalBZZQBX8-1Vmxc9GAJnapDkAdsi6RjnsOFi8osV8vd_ZWy0h4jXYieYRRVeq1_CtIWWebR6bRYcAU5_-t9WV0Dqo6AwazkM-Bjh4Fv-WvQY5q6-2SuywzcJ2L8wsj0gpw2I6-e7YEUVWVjYmEPk6PFCtjKpTfmeDcXeL2OHCwMM-ZSkiR8JtE5Nxfm",
+      "x": 800,
+      "y": 400
+    },
+    {
+      "id": "code-1",
+      "type": "code",
+      "title": "Code Snippet",
+      "content": "const universe = {\n  nodes: 42,\n  links: 128,\n  status: 'active'\n};",
+      "x": 150,
+      "y": 600
+    },
+    {
+      "id": "gif-1",
+      "type": "gif",
+      "title": "Dynamic Texture Reference",
+      "x": 450,
+      "y": 750
+    },
+    {
+      "id": "zim-1",
+      "type": "zim",
+      "title": "ZIM 3D Interactive",
+      "content": "const rect = new Rectangle(200, 200, 'orange', 'white', 4).center().drag();\nrect.animate({props:{rotation:360, rotY:360}, time:4, loop:true, ease:'linear'});\nnew Label('Drag me!', 20, 'Arial', 'white').center(rect).mov(0, 120);",
+      "x": 850,
+      "y": 700
+    }
+  ],
+  "connections": [
+    {
+      "id": "conn-1",
+      "source": "core-1",
+      "target": "img-1"
+    },
+    {
+      "id": "conn-2",
+      "source": "core-1",
+      "target": "vid-1"
+    },
+    {
+      "id": "conn-3",
+      "source": "core-1",
+      "target": "code-1"
+    },
+    {
+      "id": "conn-4",
+      "source": "core-1",
+      "target": "gif-1"
+    }
+  ]
+}
