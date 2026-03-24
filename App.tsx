@@ -1,21 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Image as ImageIcon, Video, Type, Code, Link as LinkIcon, Search, Settings, X, Sparkles, Globe, Activity, Terminal, Layout, Mic } from 'lucide-react';
+import { Plus, Image as ImageIcon, Video, Type, Code, Link as LinkIcon, Search, Settings, X, Sparkles, Globe, Activity, Terminal, Layout, Mic, Zap, Grid as GridIcon, Layers, Trash2 } from 'lucide-react';
+import { generateProceduralWorld } from './lib/worldGenerator';
 import { DraggableWindow } from './components/DraggableWindow';
-import { NodeElement, NodeData, NodeType } from './components/NodeElement';
+import { NodeElement, NodeData, NodeType, MotionType } from './components/NodeElement';
 import { Universe3D } from './components/Universe3D';
 import { io, Socket } from 'socket.io-client';
 import { generateZimCode } from './services/geminiService';
 import { AITerminal } from './components/AITerminal';
 import { VoiceUplink } from './components/VoiceUplink';
-import { WidgetType, EnvironmentSettings } from './types';
-
-export interface Connection {
-  id: string;
-  source: string;
-  target: string;
-  color?: string;
-}
+import { WidgetType, EnvironmentSettings, Connection } from './types';
 
 const DEFAULT_NODES: NodeData[] = [
   { id: 'core-1', type: 'core', title: 'Core Project', x: 500, y: 400 },
@@ -40,6 +34,7 @@ export function App() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [selectedConnection, setSelectedConnection] = useState<string | null>(null);
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeWindows, setActiveWindows] = useState<string[]>([]);
   const [bgTheme, setBgTheme] = useState('bg-nebula-gradient');
@@ -49,7 +44,17 @@ export function App() {
     backgroundColor: '#050505',
     enclosedBox: false,
     boxSize: 200,
-    boxTextures: {}
+    boxTextures: {},
+    terrain: {
+      enabled: false,
+      seed: 42,
+      scale: 20,
+      height: 5,
+      color: '#00d2ff',
+      wireframe: true,
+      animate: false,
+      speed: 0.5
+    }
   });
   
   useEffect(() => {
@@ -68,12 +73,12 @@ export function App() {
   const [newNodeUrl, setNewNodeUrl] = useState('');
   const [newNodeShape, setNewNodeShape] = useState<'sphere' | 'box' | 'cylinder' | 'torus' | 'cone'>('sphere');
   const [newNodeWidgetType, setNewNodeWidgetType] = useState<WidgetType>('METRIC');
-  const [newNodeMotionType, setNewNodeMotionType] = useState<'none' | 'orbit' | 'random' | 'zigzag' | 'pop' | 'bounce' | 'slow_trail'>('none');
+  const [newNodeMotionType, setNewNodeMotionType] = useState<MotionType>('none');
   const [newNodeMotionTargetId, setNewNodeMotionTargetId] = useState('');
   const [editNodeTitle, setEditNodeTitle] = useState('');
   const [editNodeContent, setEditNodeContent] = useState('');
   const [editNodeUrl, setEditNodeUrl] = useState('');
-  const [editNodeMotionType, setEditNodeMotionType] = useState<'none' | 'orbit' | 'random' | 'zigzag' | 'pop' | 'bounce' | 'slow_trail'>('none');
+  const [editNodeMotionType, setEditNodeMotionType] = useState<MotionType>('none');
   const [editNodeMotionTargetId, setEditNodeMotionTargetId] = useState('');
   const [editNodeMotionSpeed, setEditNodeMotionSpeed] = useState(1);
   const [editNodeMotionDirection, setEditNodeMotionDirection] = useState<1 | -1>(1);
@@ -238,6 +243,242 @@ export function App() {
                 y: stY,
                 trail: newTrail
               };
+            case 'figure_eight':
+              return {
+                ...node,
+                x: node.x + Math.sin(t) * 10 * speed,
+                y: node.y + Math.sin(t * 2) * 5 * speed
+              };
+            case 'pendulum':
+              return {
+                ...node,
+                x: node.x + Math.sin(t) * 15 * speed,
+                y: node.y + Math.abs(Math.cos(t)) * 5 * speed
+              };
+            case 'spiral':
+              const spiralRadius = (t % 10) * 20;
+              return {
+                ...node,
+                x: node.x + Math.cos(t * 5) * spiralRadius * 0.1 * speed,
+                y: node.y + Math.sin(t * 5) * spiralRadius * 0.1 * speed
+              };
+            case 'heartbeat':
+              const beat = Math.pow(Math.sin(t * 3), 10);
+              return {
+                ...node,
+                scale: 1 + beat * 0.5
+              };
+            case 'wave':
+              return {
+                ...node,
+                x: node.x + 2 * speed,
+                y: node.y + Math.sin(t * 5) * 10 * speed
+              };
+            case 'breathe':
+              return {
+                ...node,
+                scale: 1 + Math.sin(t * 2) * 0.2
+              };
+            case 'flicker':
+              return {
+                ...node,
+                opacity: Math.random() > 0.5 ? 1 : 0.3
+              };
+            case 'glitch':
+              if (Math.random() > 0.9) {
+                return {
+                  ...node,
+                  x: node.x + (Math.random() - 0.5) * 50,
+                  y: node.y + (Math.random() - 0.5) * 50
+                };
+              }
+              return node;
+            case 'orbit_elliptical':
+              if (node.motionTargetId) {
+                const target = prevNodes.find(n => n.id === node.motionTargetId);
+                if (target) {
+                  return {
+                    ...node,
+                    x: target.x + Math.cos(t) * 400,
+                    y: target.y + Math.sin(t) * 150
+                  };
+                }
+              }
+              break;
+            case 'spring':
+              return {
+                ...node,
+                y: node.y + Math.sin(t * 10) * Math.exp(-(t % 2)) * 20 * speed
+              };
+            case 'orbit_figure_eight':
+              if (node.motionTargetId) {
+                const target = prevNodes.find(n => n.id === node.motionTargetId);
+                if (target) {
+                  return {
+                    ...node,
+                    x: target.x + Math.sin(t) * 300,
+                    y: target.y + Math.sin(t * 2) * 150
+                  };
+                }
+              }
+              break;
+            case 'chase':
+              if (node.motionTargetId) {
+                const target = prevNodes.find(n => n.id === node.motionTargetId);
+                if (target) {
+                  const dx = target.x - node.x;
+                  const dy = target.y - node.y;
+                  return {
+                    ...node,
+                    x: node.x + dx * 0.05 * speed,
+                    y: node.y + dy * 0.05 * speed
+                  };
+                }
+              }
+              break;
+            case 'flee':
+              if (node.motionTargetId) {
+                const target = prevNodes.find(n => n.id === node.motionTargetId);
+                if (target) {
+                  const dx = node.x - target.x;
+                  const dy = node.y - target.y;
+                  const dist = Math.sqrt(dx * dx + dy * dy);
+                  if (dist < 500) {
+                    return {
+                      ...node,
+                      x: node.x + (dx / dist) * 5 * speed,
+                      y: node.y + (dy / dist) * 5 * speed
+                    };
+                  }
+                }
+              }
+              break;
+            case 'wander':
+              return {
+                ...node,
+                x: node.x + Math.sin(t * 0.5) * 5 * speed + Math.cos(t * 1.2) * 2 * speed,
+                y: node.y + Math.cos(t * 0.7) * 5 * speed + Math.sin(t * 1.5) * 2 * speed
+              };
+            case 'pulse_wave':
+              return {
+                ...node,
+                scale: 1 + Math.sin(node.x * 0.01 + t * 5) * 0.3
+              };
+            case 'spin_cycle':
+              return {
+                ...node,
+                x: node.x + Math.cos(t * 5) * 5 * speed,
+                y: node.y + Math.sin(t * 5) * 5 * speed,
+                rotationZ: (node.rotationZ || 0) + 5 * speed
+              };
+            case 'orbit_eccentric':
+              if (node.motionTargetId) {
+                const target = prevNodes.find(n => n.id === node.motionTargetId);
+                if (target) {
+                  const r = 200 + Math.sin(t * 3) * 100;
+                  return {
+                    ...node,
+                    x: target.x + Math.cos(t) * r,
+                    y: target.y + Math.sin(t) * r
+                  };
+                }
+              }
+              break;
+            case 'gravity_well': {
+              const cx = window.innerWidth / 2;
+              const cy = window.innerHeight / 2;
+              const gdx = cx - node.x;
+              const gdy = cy - node.y;
+              const gDist = Math.sqrt(gdx * gdx + gdy * gdy);
+              let gvx = node.velocity?.x || 0;
+              let gvy = node.velocity?.y || 0;
+              if (gDist > 50) {
+                gvx += (gdx / gDist) * 0.5 * speed;
+                gvy += (gdy / gDist) * 0.5 * speed;
+              } else {
+                gvx = (Math.random() - 0.5) * 50 * speed;
+                gvy = (Math.random() - 0.5) * 50 * speed;
+              }
+              return {
+                ...node,
+                x: node.x + gvx,
+                y: node.y + gvy,
+                velocity: { x: gvx, y: gvy }
+              };
+            }
+            case 'magnetic': {
+              let mx = node.x;
+              let my = node.y;
+              prevNodes.forEach(other => {
+                if (other.id !== node.id) {
+                  const dx = other.x - node.x;
+                  const dy = other.y - node.y;
+                  const dist = Math.sqrt(dx * dx + dy * dy);
+                  if (dist > 0 && dist < 300) {
+                    mx += (dx / dist) * 0.5 * speed;
+                    my += (dy / dist) * 0.5 * speed;
+                  }
+                }
+              });
+              return { ...node, x: mx, y: my };
+            }
+            case 'repel': {
+              let rx = node.x;
+              let ry = node.y;
+              prevNodes.forEach(other => {
+                if (other.id !== node.id) {
+                  const dx = node.x - other.x;
+                  const dy = node.y - other.y;
+                  const dist = Math.sqrt(dx * dx + dy * dy);
+                  if (dist > 0 && dist < 200) {
+                    rx += (dx / dist) * 2 * speed;
+                    ry += (dy / dist) * 2 * speed;
+                  }
+                }
+              });
+              return { ...node, x: rx, y: ry };
+            }
+            case 'orbit_wobble':
+              if (node.motionTargetId) {
+                const target = prevNodes.find(n => n.id === node.motionTargetId);
+                if (target) {
+                  const radius = 300;
+                  return {
+                    ...node,
+                    x: target.x + Math.cos(t) * radius + Math.sin(t * 10) * 20,
+                    y: target.y + Math.sin(t) * radius + Math.cos(t * 10) * 20
+                  };
+                }
+              }
+              break;
+            case 'tornado':
+              const torRadius = (t % 5) * 50;
+              return {
+                ...node,
+                x: node.x + Math.cos(t * 10) * torRadius * 0.1 * speed,
+                y: node.y - 2 * speed + Math.sin(t * 10) * torRadius * 0.1 * speed
+              };
+            case 'float_away':
+              return {
+                ...node,
+                y: node.y - 1 * speed,
+                x: node.x + Math.sin(t) * 2 * speed
+              };
+            case 'sink':
+              return {
+                ...node,
+                y: node.y + 1 * speed,
+                x: node.x + Math.sin(t) * 2 * speed
+              };
+            case 'teleport':
+              if (Math.random() > 0.98) {
+                return {
+                  ...node,
+                  x: Math.random() * window.innerWidth,
+                  y: Math.random() * window.innerHeight
+                };
+              }
+              return node;
           }
           return node;
         });
@@ -267,12 +508,23 @@ export function App() {
     }
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setConnectingFrom(null);
+        setSelectedNode(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isPanning) {
       setPan({ x: e.clientX - startPan.x, y: e.clientY - startPan.y });
     }
     if (connectingFrom) {
-      setMousePos({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+      setMousePos({ x: (e.clientX - pan.x) / zoom, y: (e.clientY - pan.y) / zoom });
     }
   };
 
@@ -302,7 +554,7 @@ export function App() {
 
   const handleConnectStart = (id: string, e: React.MouseEvent) => {
     setConnectingFrom(id);
-    setMousePos({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    setMousePos({ x: (e.clientX - pan.x) / zoom, y: (e.clientY - pan.y) / zoom });
   };
 
   const toggleWindow = (id: string) => {
@@ -649,20 +901,38 @@ export function App() {
                   />
                 );
               })}
+              {connectingFrom && (() => {
+                const source = nodes.find(n => n.id === connectingFrom);
+                if (!source) return null;
+                const sx = source.x + (source.type === 'core' ? 64 : 100);
+                const sy = source.y + (source.type === 'core' ? 64 : 50);
+                
+                let tx = mousePos.x;
+                let ty = mousePos.y;
+                
+                if (hoveredNodeId && hoveredNodeId !== connectingFrom) {
+                  const target = nodes.find(n => n.id === hoveredNodeId);
+                  if (target) {
+                    tx = target.x + (target.type === 'core' ? 64 : 100);
+                    ty = target.y + (target.type === 'core' ? 64 : 50);
+                  }
+                }
+
+                return (
+                  <line
+                    x1={sx}
+                    y1={sy}
+                    x2={tx}
+                    y2={ty}
+                    stroke={hoveredNodeId && hoveredNodeId !== connectingFrom ? "rgba(0, 255, 150, 0.8)" : "rgba(0, 210, 255, 0.8)"}
+                    strokeWidth="2"
+                    strokeDasharray={hoveredNodeId ? "0" : "5,5"}
+                    className={hoveredNodeId ? "" : "animate-pulse"}
+                    style={{ transform: `translateZ(${source.z || 0}px)` }}
+                  />
+                );
+              })()}
             </svg>
-            {connectingFrom && (
-                <div
-                  className="absolute bg-neon-blue/30"
-                  style={{
-                    left: nodes.find(n => n.id === connectingFrom)?.x! + (nodes.find(n => n.id === connectingFrom)?.type === 'core' ? 64 : 100),
-                    top: nodes.find(n => n.id === connectingFrom)?.y! + (nodes.find(n => n.id === connectingFrom)?.type === 'core' ? 64 : 50),
-                    width: Math.sqrt(Math.pow(mousePos.x - (nodes.find(n => n.id === connectingFrom)?.x! + 100), 2) + Math.pow(mousePos.y - (nodes.find(n => n.id === connectingFrom)?.y! + 50), 2)),
-                    height: 2,
-                    transformOrigin: '0 50%',
-                    transform: `rotateZ(${Math.atan2(mousePos.y - (nodes.find(n => n.id === connectingFrom)?.y! + 50), mousePos.x - (nodes.find(n => n.id === connectingFrom)?.x! + 100)) * 180 / Math.PI}deg)`
-                  }}
-                />
-              )}
             
             {/* Interactive Nodes Container */}
             {nodes.map(node => {
@@ -673,6 +943,7 @@ export function App() {
                   node={node}
                   nodes={nodes}
                   isSelected={selectedNode === node.id || connectingFrom === node.id}
+                  isConnectingTarget={connectingFrom !== null && hoveredNodeId === node.id && connectingFrom !== node.id}
                   isMatch={isMatch}
                   onSelect={handleNodeSelect}
                   onDragEnd={handleNodeDragEnd}
@@ -681,6 +952,8 @@ export function App() {
                   onLinkExisting={handleLinkExisting}
                   onDelete={handleDeleteNode}
                   onUpdateNode={handleUpdateNode}
+                  onMouseEnter={() => setHoveredNodeId(node.id)}
+                  onMouseLeave={() => setHoveredNodeId(null)}
                 />
               );
             })}
@@ -854,6 +1127,10 @@ export function App() {
                 <Terminal size={20} />
                 <span className="absolute right-14 bg-space-900 px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap uppercase tracking-widest">AI Terminal</span>
               </button>
+              <button onClick={() => toggleWindow('worldGen')} className="glass-morphism w-12 h-12 rounded-full flex items-center justify-center hover:bg-emerald-500/20 hover:text-emerald-400 transition-colors group relative">
+                <Globe size={20} />
+                <span className="absolute right-14 bg-space-900 px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap uppercase tracking-widest">World Generator</span>
+              </button>
               <button onClick={() => setIsVoiceUplinkOpen(!isVoiceUplinkOpen)} className={`glass-morphism w-12 h-12 rounded-full flex items-center justify-center transition-colors group relative ${isVoiceUplinkOpen ? 'bg-neon-blue/20 text-neon-blue' : 'hover:bg-neon-blue/20 hover:text-neon-blue'}`}>
                 <Mic size={20} />
                 <span className="absolute right-14 bg-space-900 px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap uppercase tracking-widest">Voice Uplink</span>
@@ -894,7 +1171,7 @@ export function App() {
           <DraggableWindow title="Add Node" onClose={() => toggleWindow('addNode')} defaultPosition={{ x: Math.max(20, window.innerWidth / 2 - 160), y: 150 }}>
             <div className="space-y-4 w-64">
               <div className="flex gap-2 flex-wrap">
-                {(['text', 'image', 'video', 'code', 'gif', '3d', 'search', 'webpage', 'embed', 'zim', 'widget'] as NodeType[]).map(type => (
+                {(['text', 'image', 'video', 'code', 'gif', '3d', 'search', 'webpage', 'embed', 'zim', 'widget', 'pollinations'] as NodeType[]).map(type => (
                   <button 
                     key={type}
                     onClick={() => setNewNodeType(type)}
@@ -911,6 +1188,7 @@ export function App() {
                     {type === 'embed' && <span className="text-[10px] font-bold">EMBED</span>}
                     {type === 'zim' && <Activity size={16} />}
                     {type === 'widget' && <Layout size={16} />}
+                    {type === 'pollinations' && <Zap size={16} />}
                   </button>
                 ))}
               </div>
@@ -935,6 +1213,56 @@ export function App() {
                     <option value="NETWORK_TRAFFIC">Network Traffic</option>
                     <option value="STOCK_TICKER">Stock Ticker</option>
                     <option value="NEWS_FEED">News Feed</option>
+                    <option value="RADAR_SWEEP">Radar Sweep</option>
+                    <option value="AUDIO_VISUALIZER">Audio Visualizer</option>
+                    <option value="HEART_RATE">Heart Rate</option>
+                    <option value="BATTERY_STATUS">Battery Status</option>
+                    <option value="MEMORY_USAGE">Memory Usage</option>
+                    <option value="DISK_SPACE">Disk Space</option>
+                    <option value="SERVER_PING">Server Ping</option>
+                    <option value="DOWNLOAD_SPEED">Download Speed</option>
+                    <option value="UPLOAD_SPEED">Upload Speed</option>
+                    <option value="ACTIVE_USERS">Active Users</option>
+                    <option value="REVENUE_CHART">Revenue Chart</option>
+                    <option value="CONVERSION_RATE">Conversion Rate</option>
+                    <option value="ERROR_RATE">Error Rate</option>
+                    <option value="DATABASE_LOAD">Database Load</option>
+                    <option value="CACHE_HIT_RATIO">Cache Hit Ratio</option>
+                    <option value="API_REQUESTS">API Requests</option>
+                    <option value="LATENCY_GRAPH">Latency Graph</option>
+                    <option value="UPTIME_COUNTER">Uptime Counter</option>
+                    <option value="SECURITY_ALERTS">Security Alerts</option>
+                    <option value="THREAT_LEVEL">Threat Level</option>
+                    <option value="FIREWALL_STATUS">Firewall Status</option>
+                    <option value="ENCRYPTION_STATUS">Encryption Status</option>
+                    <option value="VPN_CONNECTION">VPN Connection</option>
+                    <option value="SATELLITE_TRACKING">Satellite Tracking</option>
+                    <option value="GPS_COORDINATES">GPS Coordinates</option>
+                    <option value="COMPASS">Compass</option>
+                    <option value="ALTIMETER">Altimeter</option>
+                    <option value="SPEEDOMETER">Speedometer</option>
+                    <option value="TACHOMETER">Tachometer</option>
+                    <option value="FUEL_GAUGE">Fuel Gauge</option>
+                    <option value="ENGINE_TEMP">Engine Temp</option>
+                    <option value="OIL_PRESSURE">Oil Pressure</option>
+                    <option value="GEAR_INDICATOR">Gear Indicator</option>
+                    <option value="G_FORCE_METER">G Force Meter</option>
+                    <option value="GYROSCOPE">Gyroscope</option>
+                    <option value="ACCELEROMETER">Accelerometer</option>
+                    <option value="MAGNETIC_FIELD">Magnetic Field</option>
+                    <option value="LIGHT_SENSOR">Light Sensor</option>
+                    <option value="PROXIMITY_SENSOR">Proximity Sensor</option>
+                    <option value="PRESSURE_SENSOR">Pressure Sensor</option>
+                    <option value="HUMIDITY_SENSOR">Humidity Sensor</option>
+                    <option value="CO2_LEVEL">CO2 Level</option>
+                    <option value="AIR_QUALITY">Air Quality</option>
+                    <option value="RADIATION_LEVEL">Radiation Level</option>
+                    <option value="SEISMIC_ACTIVITY">Seismic Activity</option>
+                    <option value="SOLAR_FLARE">Solar Flare</option>
+                    <option value="LUNAR_PHASE">Lunar Phase</option>
+                    <option value="TIDE_LEVEL">Tide Level</option>
+                    <option value="WIND_DIRECTION">Wind Direction</option>
+                    <option value="PRECIPITATION_PROB">Precipitation Prob</option>
                   </select>
                 </div>
               )}
@@ -1015,7 +1343,11 @@ export function App() {
                         { name: 'TextureActive', code: 'new TextureActive({width:W, height:H, color:pink, corner:20}).center();\nnew Circle(100, blue).center(prev).drag();' },
                         { name: 'Shader', code: 'new Shader(W, H, `\nprecision mediump float;\nuniform float time;\nuniform vec2 resolution;\nvoid main() {\n    vec2 uv = gl_FragCoord.xy / resolution.xy;\n    gl_FragColor = vec4(uv.x, uv.y, sin(time), 1.0);\n}`).center();' },
                         { name: 'Synth', code: 'const synth = new Synth();\nnew Dial().center().change(e=>{synth.play(e.target.value*10+200);});' },
-                        { name: 'Perspective', code: 'new Perspective({layers:[new Rectangle(W,H,blue), new Circle(100,red).center()], depth:.5}).center().drag();' }
+                        { name: 'Perspective', code: 'new Perspective({layers:[new Rectangle(W,H,blue), new Circle(100,red).center()], depth:.5}).center().drag();' },
+                        { name: 'Animation', code: 'new Circle(100, pink).center().animate({props:{scale:1.5}, time:1, loop:true, rewind:true});' },
+                        { name: 'Events', code: 'new Rectangle(200, 200, blue).center().tap(e => { e.target.color = e.target.color == blue ? green : blue; S.update(); });' },
+                        { name: '3D Spin', code: 'new Rectangle(200, 200, orange).center().drag().animate({props:{rotY:360, rotX:360}, time:5, loop:true, ease:"linear"});' },
+                        { name: '3D Cube', code: 'new Box(150, 150, 150, green).center().drag();' }
                       ].map(template => (
                         <button
                           key={template.name}
@@ -1071,10 +1403,35 @@ export function App() {
                   <option value="pop">Pop In/Out</option>
                   <option value="bounce">Elliptical Bounce</option>
                   <option value="slow_trail">Slow Motion + Trails</option>
+                  <option value="figure_eight">Figure Eight</option>
+                  <option value="pendulum">Pendulum</option>
+                  <option value="spiral">Spiral</option>
+                  <option value="heartbeat">Heartbeat</option>
+                  <option value="wave">Wave</option>
+                  <option value="breathe">Breathe</option>
+                  <option value="flicker">Flicker</option>
+                  <option value="glitch">Glitch</option>
+                  <option value="orbit_elliptical">Elliptical Orbit</option>
+                  <option value="spring">Spring</option>
+                  <option value="orbit_figure_eight">Figure-8 Orbit</option>
+                  <option value="chase">Chase Target</option>
+                  <option value="flee">Flee Target</option>
+                  <option value="wander">Wander</option>
+                  <option value="pulse_wave">Pulse Wave</option>
+                  <option value="spin_cycle">Spin Cycle</option>
+                  <option value="orbit_eccentric">Eccentric Orbit</option>
+                  <option value="gravity_well">Gravity Well</option>
+                  <option value="magnetic">Magnetic</option>
+                  <option value="repel">Repel</option>
+                  <option value="orbit_wobble">Wobble Orbit</option>
+                  <option value="tornado">Tornado</option>
+                  <option value="float_away">Float Away</option>
+                  <option value="sink">Sink</option>
+                  <option value="teleport">Teleport</option>
                 </select>
               </div>
 
-              {newNodeMotionType === 'orbit' && (
+              {['orbit', 'orbit_elliptical', 'orbit_figure_eight', 'chase', 'flee', 'orbit_eccentric', 'orbit_wobble'].includes(newNodeMotionType) && (
                 <div className="space-y-2">
                   <label className="text-[10px] text-gray-400 uppercase tracking-wider">Orbit Around</label>
                   <select 
@@ -1174,10 +1531,14 @@ export function App() {
                       {nodes.find(n => n.id === selectedNode)?.type === 'zim' && (
                         <div className="flex flex-wrap gap-1 mb-2">
                           {[
-                            { name: 'TextureActive', code: 'new TextureActive({width:W, height:H, color:pink, corner:20}).center();\nnew Circle(100, blue).center().drag();' },
+                            { name: 'TextureActive', code: 'new TextureActive({width:W, height:H, color:pink, corner:20}).center();\nnew Circle(100, blue).center(prev).drag();' },
                             { name: 'Shader', code: 'new Shader(W, H, `\nprecision mediump float;\nuniform float time;\nuniform vec2 resolution;\nvoid main() {\n    vec2 uv = gl_FragCoord.xy / resolution.xy;\n    gl_FragColor = vec4(uv.x, uv.y, sin(time), 1.0);\n}`).center();' },
                             { name: 'Synth', code: 'const synth = new Synth();\nnew Dial().center().change(e=>{synth.play(e.target.value*10+200);});' },
-                            { name: 'Perspective', code: 'new Perspective({layers:[new Rectangle(W,H,blue), new Circle(100,red).center()], depth:.5}).center().drag();' }
+                            { name: 'Perspective', code: 'new Perspective({layers:[new Rectangle(W,H,blue), new Circle(100,red).center()], depth:.5}).center().drag();' },
+                            { name: 'Animation', code: 'new Circle(100, pink).center().animate({props:{scale:1.5}, time:1, loop:true, rewind:true});' },
+                            { name: 'Events', code: 'new Rectangle(200, 200, blue).center().tap(e => { e.target.color = e.target.color == blue ? green : blue; S.update(); });' },
+                            { name: '3D Spin', code: 'new Rectangle(200, 200, orange).center().drag().animate({props:{rotY:360, rotX:360}, time:5, loop:true, ease:"linear"});' },
+                            { name: '3D Cube', code: 'new Box(150, 150, 150, green).center().drag();' }
                           ].map(template => (
                             <button
                               key={template.name}
@@ -1233,10 +1594,35 @@ export function App() {
                     <option value="pop">Pop In/Out</option>
                     <option value="bounce">Elliptical Bounce</option>
                     <option value="slow_trail">Slow Motion + Trails</option>
+                    <option value="figure_eight">Figure Eight</option>
+                    <option value="pendulum">Pendulum</option>
+                    <option value="spiral">Spiral</option>
+                    <option value="heartbeat">Heartbeat</option>
+                    <option value="wave">Wave</option>
+                    <option value="breathe">Breathe</option>
+                    <option value="flicker">Flicker</option>
+                    <option value="glitch">Glitch</option>
+                    <option value="orbit_elliptical">Elliptical Orbit</option>
+                    <option value="spring">Spring</option>
+                    <option value="orbit_figure_eight">Figure-8 Orbit</option>
+                    <option value="chase">Chase Target</option>
+                    <option value="flee">Flee Target</option>
+                    <option value="wander">Wander</option>
+                    <option value="pulse_wave">Pulse Wave</option>
+                    <option value="spin_cycle">Spin Cycle</option>
+                    <option value="orbit_eccentric">Eccentric Orbit</option>
+                    <option value="gravity_well">Gravity Well</option>
+                    <option value="magnetic">Magnetic</option>
+                    <option value="repel">Repel</option>
+                    <option value="orbit_wobble">Wobble Orbit</option>
+                    <option value="tornado">Tornado</option>
+                    <option value="float_away">Float Away</option>
+                    <option value="sink">Sink</option>
+                    <option value="teleport">Teleport</option>
                   </select>
                 </div>
 
-                {editNodeMotionType === 'orbit' && (
+                {['orbit', 'orbit_elliptical', 'orbit_figure_eight', 'chase', 'flee', 'orbit_eccentric', 'orbit_wobble'].includes(editNodeMotionType) && (
                   <div className="space-y-2">
                     <label className="text-[10px] text-gray-400 uppercase tracking-wider">Orbit Around</label>
                     <select 
@@ -1343,6 +1729,112 @@ export function App() {
           </DraggableWindow>
         )}
 
+        {activeWindows.includes('worldGen') && (
+          <DraggableWindow title="World Generator" onClose={() => toggleWindow('worldGen')} defaultPosition={{ x: 150, y: 200 }}>
+            <div className="w-72 space-y-4">
+              <p className="text-[10px] text-gray-400 uppercase tracking-wider">Procedural Universe Creation</p>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <button 
+                  onClick={() => {
+                    const { nodes: newNodes, connections: newConns } = generateProceduralWorld('grid', 16);
+                    setNodes(prev => {
+                      const combined = [...prev, ...newNodes];
+                      return Array.from(new Map(combined.map(n => [n.id, n])).values());
+                    });
+                    setConnections(prev => {
+                      const combined = [...prev, ...newConns];
+                      return Array.from(new Map(combined.map(c => [c.id, c])).values());
+                    });
+                    // Sync with server
+                    newNodes.forEach(n => socketRef.current?.emit('create-node', n));
+                    newConns.forEach(c => socketRef.current?.emit('create-connection', c));
+                  }}
+                  className="flex flex-col items-center gap-2 p-3 bg-white/5 hover:bg-neon-blue/20 border border-white/10 hover:border-neon-blue/50 rounded transition-all group"
+                >
+                  <GridIcon size={24} className="text-gray-400 group-hover:text-neon-blue" />
+                  <span className="text-[10px] text-gray-300 uppercase">Grid Matrix</span>
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    const { nodes: newNodes, connections: newConns } = generateProceduralWorld('sphere', 24);
+                    setNodes(prev => {
+                      const combined = [...prev, ...newNodes];
+                      return Array.from(new Map(combined.map(n => [n.id, n])).values());
+                    });
+                    setConnections(prev => {
+                      const combined = [...prev, ...newConns];
+                      return Array.from(new Map(combined.map(c => [c.id, c])).values());
+                    });
+                    // Sync with server
+                    newNodes.forEach(n => socketRef.current?.emit('create-node', n));
+                    newConns.forEach(c => socketRef.current?.emit('create-connection', c));
+                  }}
+                  className="flex flex-col items-center gap-2 p-3 bg-white/5 hover:bg-neon-purple/20 border border-white/10 hover:border-neon-purple/50 rounded transition-all group"
+                >
+                  <Globe size={24} className="text-gray-400 group-hover:text-neon-purple" />
+                  <span className="text-[10px] text-gray-300 uppercase">Orbital Sphere</span>
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    const { nodes: newNodes, connections: newConns } = generateProceduralWorld('fractal', 1);
+                    setNodes(prev => {
+                      const combined = [...prev, ...newNodes];
+                      return Array.from(new Map(combined.map(n => [n.id, n])).values());
+                    });
+                    setConnections(prev => {
+                      const combined = [...prev, ...newConns];
+                      return Array.from(new Map(combined.map(c => [c.id, c])).values());
+                    });
+                    // Sync with server
+                    newNodes.forEach(n => socketRef.current?.emit('create-node', n));
+                    newConns.forEach(c => socketRef.current?.emit('create-connection', c));
+                  }}
+                  className="flex flex-col items-center gap-2 p-3 bg-white/5 hover:bg-neon-pink/20 border border-white/10 hover:border-neon-pink/50 rounded transition-all group"
+                >
+                  <Layers size={24} className="text-gray-400 group-hover:text-neon-pink" />
+                  <span className="text-[10px] text-gray-300 uppercase">Fractal Tree</span>
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    const { nodes: newNodes, connections: newConns } = generateProceduralWorld('random', 15);
+                    setNodes(prev => {
+                      const combined = [...prev, ...newNodes];
+                      return Array.from(new Map(combined.map(n => [n.id, n])).values());
+                    });
+                    setConnections(prev => {
+                      const combined = [...prev, ...newConns];
+                      return Array.from(new Map(combined.map(c => [c.id, c])).values());
+                    });
+                    // Sync with server
+                    newNodes.forEach(n => socketRef.current?.emit('create-node', n));
+                    newConns.forEach(c => socketRef.current?.emit('create-connection', c));
+                  }}
+                  className="flex flex-col items-center gap-2 p-3 bg-white/5 hover:bg-emerald-500/20 border border-white/10 hover:border-emerald-500/50 rounded transition-all group"
+                >
+                  <Zap size={24} className="text-gray-400 group-hover:text-emerald-400" />
+                  <span className="text-[10px] text-gray-300 uppercase">Chaos Cluster</span>
+                </button>
+              </div>
+
+              <div className="p-3 bg-space-900/50 rounded border border-white/5 text-[10px] text-gray-400 italic">
+                Procedural generation uses mathematical algorithms to create complex structures instantly.
+              </div>
+
+              <button 
+                onClick={handleResetUniverse}
+                className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-[10px] uppercase tracking-widest rounded transition-colors flex items-center justify-center gap-2"
+              >
+                <Trash2 size={12} />
+                Purge All Nodes
+              </button>
+            </div>
+          </DraggableWindow>
+        )}
+
         {activeWindows.includes('bookmarks') && (
           <DraggableWindow title="Bookmarks" onClose={() => toggleWindow('bookmarks')} defaultPosition={{ x: 50, y: 200 }}>
             <div className="w-64 space-y-2">
@@ -1429,6 +1921,102 @@ export function App() {
                       />
                     </div>
 
+                    <div className="space-y-4 border-t border-white/5 pt-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-neon-blue font-bold uppercase tracking-wider">Terrain Generator</span>
+                        <div 
+                          onClick={() => setEnvSettings({
+                            ...envSettings, 
+                            terrain: { ...(envSettings.terrain || { enabled: false, seed: 42, scale: 20, height: 5, color: "#00d2ff", wireframe: true, animate: false, speed: 0.5 }), enabled: !envSettings.terrain?.enabled }
+                          })}
+                          className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${envSettings.terrain?.enabled ? 'bg-neon-blue' : 'bg-gray-600'}`}
+                        >
+                          <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${envSettings.terrain?.enabled ? 'right-1' : 'left-1'}`}></div>
+                        </div>
+                      </div>
+
+                      {envSettings.terrain?.enabled && (
+                        <div className="space-y-3 pl-2 border-l border-neon-blue/20">
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-gray-400 uppercase tracking-wider flex justify-between">
+                              Seed <span>{envSettings.terrain.seed}</span>
+                            </label>
+                            <input 
+                              type="range"
+                              min="1"
+                              max="1000"
+                              value={envSettings.terrain.seed}
+                              onChange={(e) => setEnvSettings({
+                                ...envSettings,
+                                terrain: { ...envSettings.terrain!, seed: parseInt(e.target.value) }
+                              })}
+                              className="w-full accent-neon-blue"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-gray-400 uppercase tracking-wider flex justify-between">
+                              Scale <span>{envSettings.terrain.scale}</span>
+                            </label>
+                            <input 
+                              type="range"
+                              min="5"
+                              max="100"
+                              value={envSettings.terrain.scale}
+                              onChange={(e) => setEnvSettings({
+                                ...envSettings,
+                                terrain: { ...envSettings.terrain!, scale: parseInt(e.target.value) }
+                              })}
+                              className="w-full accent-neon-blue"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-gray-400 uppercase tracking-wider flex justify-between">
+                              Height <span>{envSettings.terrain.height}</span>
+                            </label>
+                            <input 
+                              type="range"
+                              min="1"
+                              max="50"
+                              value={envSettings.terrain.height}
+                              onChange={(e) => setEnvSettings({
+                                ...envSettings,
+                                terrain: { ...envSettings.terrain!, height: parseInt(e.target.value) }
+                              })}
+                              className="w-full accent-neon-blue"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-gray-400 uppercase tracking-wider">Wireframe</span>
+                            <div 
+                              onClick={() => setEnvSettings({
+                                ...envSettings,
+                                terrain: { ...envSettings.terrain!, wireframe: !envSettings.terrain!.wireframe }
+                              })}
+                              className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${envSettings.terrain.wireframe ? 'bg-neon-pink' : 'bg-gray-600'}`}
+                            >
+                              <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${envSettings.terrain.wireframe ? 'right-1' : 'left-1'}`}></div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-gray-400 uppercase tracking-wider">Animate</span>
+                            <div 
+                              onClick={() => setEnvSettings({
+                                ...envSettings,
+                                terrain: { ...envSettings.terrain!, animate: !envSettings.terrain!.animate }
+                              })}
+                              className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${envSettings.terrain.animate ? 'bg-emerald-500' : 'bg-gray-600'}`}
+                            >
+                              <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${envSettings.terrain.animate ? 'right-1' : 'left-1'}`}></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="space-y-2 border-t border-white/5 pt-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-gray-300">Enclosed Box</span>
@@ -1456,6 +2044,91 @@ export function App() {
                       )}
                     </div>
 
+                    <div className="space-y-2 border-t border-white/5 pt-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-300">Terrain Generator</span>
+                        <div 
+                          onClick={() => setEnvSettings({...envSettings, terrain: {...(envSettings.terrain || { enabled: false, seed: 42, scale: 20, height: 5, color: '#00d2ff', wireframe: true, animate: false, speed: 0.5 }), enabled: !envSettings.terrain?.enabled}})}
+                          className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${envSettings.terrain?.enabled ? 'bg-neon-blue' : 'bg-gray-600'}`}
+                        >
+                          <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${envSettings.terrain?.enabled ? 'right-1' : 'left-1'}`}></div>
+                        </div>
+                      </div>
+                      {envSettings.terrain?.enabled && (
+                        <div className="space-y-3 mt-2 p-2 bg-white/5 rounded border border-white/10">
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-gray-400 uppercase tracking-wider flex justify-between">
+                              Terrain Height <span>{envSettings.terrain.height}</span>
+                            </label>
+                            <input 
+                              type="range"
+                              min="1"
+                              max="50"
+                              value={envSettings.terrain.height}
+                              onChange={(e) => setEnvSettings({...envSettings, terrain: {...envSettings.terrain!, height: parseInt(e.target.value)}})}
+                              className="w-full accent-neon-blue"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-gray-400 uppercase tracking-wider flex justify-between">
+                              Terrain Scale <span>{envSettings.terrain.scale}</span>
+                            </label>
+                            <input 
+                              type="range"
+                              min="5"
+                              max="100"
+                              value={envSettings.terrain.scale}
+                              onChange={(e) => setEnvSettings({...envSettings, terrain: {...envSettings.terrain!, scale: parseInt(e.target.value)}})}
+                              className="w-full accent-neon-blue"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-gray-400 uppercase tracking-wider">Wireframe</span>
+                            <div 
+                              onClick={() => setEnvSettings({...envSettings, terrain: {...envSettings.terrain!, wireframe: !envSettings.terrain?.wireframe}})}
+                              className={`w-6 h-3 rounded-full relative cursor-pointer transition-colors ${envSettings.terrain?.wireframe ? 'bg-neon-blue' : 'bg-gray-600'}`}
+                            >
+                              <div className={`absolute top-0.5 w-2 h-2 bg-white rounded-full transition-transform ${envSettings.terrain?.wireframe ? 'right-0.5' : 'left-0.5'}`}></div>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-gray-400 uppercase tracking-wider">Animate</span>
+                            <div 
+                              onClick={() => setEnvSettings({...envSettings, terrain: {...envSettings.terrain!, animate: !envSettings.terrain?.animate}})}
+                              className={`w-6 h-3 rounded-full relative cursor-pointer transition-colors ${envSettings.terrain?.animate ? 'bg-neon-blue' : 'bg-gray-600'}`}
+                            >
+                              <div className={`absolute top-0.5 w-2 h-2 bg-white rounded-full transition-transform ${envSettings.terrain?.animate ? 'right-0.5' : 'left-0.5'}`}></div>
+                            </div>
+                          </div>
+                          {envSettings.terrain?.animate && (
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-gray-400 uppercase tracking-wider flex justify-between">
+                                Animation Speed <span>{envSettings.terrain.speed}</span>
+                              </label>
+                              <input 
+                                type="range"
+                                min="0.1"
+                                max="2"
+                                step="0.1"
+                                value={envSettings.terrain.speed}
+                                onChange={(e) => setEnvSettings({...envSettings, terrain: {...envSettings.terrain!, speed: parseFloat(e.target.value)}})}
+                                className="w-full accent-neon-blue"
+                              />
+                            </div>
+                          )}
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-gray-400 uppercase tracking-wider">Terrain Color</label>
+                            <input 
+                              type="color"
+                              value={envSettings.terrain.color}
+                              onChange={(e) => setEnvSettings({...envSettings, terrain: {...envSettings.terrain!, color: e.target.value}})}
+                              className="w-full h-6 bg-space-800 border border-white/10 rounded cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="mt-2 text-[10px] text-neon-blue space-y-1 bg-space-900/50 p-2 rounded border border-neon-blue/20">
                       <p>• Right-click and drag to look around.</p>
                       <p>• Use W, A, S, D, Q, E to fly through space.</p>
@@ -1464,8 +2137,54 @@ export function App() {
                   </>
                 )}
 
-                <div className="space-y-2 border-t border-white/10 pt-4">
-                  <label className="text-[10px] text-gray-400 uppercase tracking-wider">Universe Management</label>
+                    <div className="space-y-4 border-t border-white/5 pt-4">
+                      <p className="text-[10px] text-neon-pink font-bold uppercase tracking-wider">Procedural World Gen</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button 
+                          onClick={() => {
+                            const { nodes: newNodes, connections: newConns } = generateProceduralWorld('grid', 25);
+                            setNodes(newNodes);
+                            setConnections(newConns);
+                          }}
+                          className="py-2 bg-space-800 border border-white/10 rounded text-[10px] text-gray-300 hover:border-neon-pink hover:text-white transition-all"
+                        >
+                          Grid Matrix
+                        </button>
+                        <button 
+                          onClick={() => {
+                            const { nodes: newNodes, connections: newConns } = generateProceduralWorld('sphere', 30);
+                            setNodes(newNodes);
+                            setConnections(newConns);
+                          }}
+                          className="py-2 bg-space-800 border border-white/10 rounded text-[10px] text-gray-300 hover:border-neon-pink hover:text-white transition-all"
+                        >
+                          Orbital Sphere
+                        </button>
+                        <button 
+                          onClick={() => {
+                            const { nodes: newNodes, connections: newConns } = generateProceduralWorld('fractal', 3);
+                            setNodes(newNodes);
+                            setConnections(newConns);
+                          }}
+                          className="py-2 bg-space-800 border border-white/10 rounded text-[10px] text-gray-300 hover:border-neon-pink hover:text-white transition-all"
+                        >
+                          Fractal Tree
+                        </button>
+                        <button 
+                          onClick={() => {
+                            const { nodes: newNodes, connections: newConns } = generateProceduralWorld('random', 20);
+                            setNodes(newNodes);
+                            setConnections(newConns);
+                          }}
+                          className="py-2 bg-space-800 border border-white/10 rounded text-[10px] text-gray-300 hover:border-neon-pink hover:text-white transition-all"
+                        >
+                          Chaos Cluster
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 border-t border-white/10 pt-4">
+                      <label className="text-[10px] text-gray-400 uppercase tracking-wider">Universe Management</label>
                   <button 
                     onClick={handleResetUniverse}
                     className="w-full py-2 bg-red-500/20 text-red-500 border border-red-500/50 rounded text-xs font-bold hover:bg-red-500/30 transition-all"

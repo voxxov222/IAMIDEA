@@ -37,7 +37,7 @@ export const WeatherWidget = ({ widget }: { widget: DashboardWidget }) => {
   );
 };
 
-export const DigitalClockWidget = ({ widget }: { widget: DashboardWidget }) => {
+export const ClockWidget = ({ widget }: { widget: DashboardWidget }) => {
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -66,7 +66,7 @@ export const CpuUsageWidget = ({ widget }: { widget: DashboardWidget }) => {
   useEffect(() => {
     const interval = setInterval(() => {
       setUsage(prev => {
-        const next = [...prev.slice(1), { id: `cpu-${Date.now()}`, val: Math.random() * 100 }];
+        const next = [...prev.slice(1), { id: `cpu-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, val: Math.random() * 100 }];
         return next;
       });
     }, 1000);
@@ -103,7 +103,7 @@ export const NetworkTrafficWidget = ({ widget }: { widget: DashboardWidget }) =>
   useEffect(() => {
     const interval = setInterval(() => {
       setData(prev => [...prev.slice(1), {
-        id: `net-${Date.now()}`,
+        id: `net-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         in: Math.random() * 80,
         out: Math.random() * 40
       }]);
@@ -379,14 +379,14 @@ export const NexusVolumeWidget = ({ widget }: { widget: DashboardWidget }) => {
 };
 
 export const SocketStreamWidget = ({ widget }: { widget: DashboardWidget }) => {
-  const [messages, setMessages] = useState<string[]>([]);
+  const [messages, setMessages] = useState<{id: string, text: string}[]>([]);
   
   useEffect(() => {
     // In a real app, we'd connect to the provided URL
     // For this demo, we'll simulate a stream
     const interval = setInterval(() => {
       const newMsg = `[${new Date().toLocaleTimeString()}] DATA_PACKET_${Math.floor(Math.random() * 1000)}: ${Math.random().toFixed(4)}`;
-      setMessages(prev => [newMsg, ...prev].slice(0, 20));
+      setMessages(prev => [{ id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, text: newMsg }, ...prev].slice(0, 20));
     }, 1000);
     
     return () => clearInterval(interval);
@@ -402,9 +402,9 @@ export const SocketStreamWidget = ({ widget }: { widget: DashboardWidget }) => {
         <span className="text-gray-500">ws://nexus.stream</span>
       </div>
       <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
-        {messages.map((msg, i) => (
-          <div key={`socket-msg-${i}-${msg.substring(0, 10)}`} className="text-gray-300 border-l border-emerald-500/30 pl-2 truncate">
-            {msg}
+        {messages.map((msg) => (
+          <div key={msg.id} className="text-gray-300 border-l border-emerald-500/30 pl-2 truncate">
+            {msg.text}
           </div>
         ))}
       </div>

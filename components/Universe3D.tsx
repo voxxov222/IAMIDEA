@@ -1,7 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Html, OrbitControls, Grid, Line, Stars, Sphere, Box, Cylinder, Torus, Cone, Environment } from '@react-three/drei';
+import { Html, Grid, Line, Stars, Sphere, Box, Cylinder, Torus, Cone, Environment } from '@react-three/drei';
 import { NodeElement, NodeData } from './NodeElement';
+import { CameraController } from './CameraController';
+import { TerrainGenerator } from './TerrainGenerator';
 import * as THREE from 'three';
 import { EnvironmentSettings } from '../types';
 
@@ -45,7 +47,7 @@ const EnclosedBox = ({ settings }: { settings: EnvironmentSettings }) => {
   const size = settings.boxSize || 200;
   
   return (
-    <Box args={[size, size, size]} position={[0, 0, 0]}>
+    <Box args={[size, size, size]} position={[0, 0, 0]} raycast={() => null}>
       <meshStandardMaterial 
         color={settings.backgroundColor || "#111"} 
         side={THREE.BackSide} 
@@ -60,6 +62,7 @@ const EnclosedBox = ({ settings }: { settings: EnvironmentSettings }) => {
 
 const Node3D = ({ node, nodes, isSelected, isMatch, onSelect, onDragEnd, onConnectStart, onCreateAndLink, onLinkExisting, onDelete, onUpdateNode }: any) => {
   const meshRef = useRef<THREE.Group>(null);
+  const [isHovered, setIsHovered] = useState(false);
   
   useFrame((state) => {
     if (!meshRef.current) return;
@@ -143,6 +146,246 @@ const Node3D = ({ node, nodes, isSelected, isMatch, onSelect, onDragEnd, onConne
           node.trail.push({ x: meshRef.current.position.x, y: meshRef.current.position.y, z: meshRef.current.position.z });
           if (node.trail.length > 20) node.trail.shift();
           break;
+        case 'figure_eight':
+          meshRef.current.position.x += Math.sin(t) * 0.1 * speed;
+          meshRef.current.position.y += Math.sin(t * 2) * 0.05 * speed;
+          break;
+        case 'pendulum':
+          meshRef.current.position.x += Math.sin(t) * 0.15 * speed;
+          meshRef.current.position.y += Math.abs(Math.cos(t)) * 0.05 * speed;
+          break;
+        case 'spiral':
+          const spiralRadius = (t % 10) * 0.5;
+          meshRef.current.position.x += Math.cos(t * 5) * spiralRadius * 0.01 * speed;
+          meshRef.current.position.z += Math.sin(t * 5) * spiralRadius * 0.01 * speed;
+          break;
+        case 'heartbeat':
+          const beat = Math.pow(Math.sin(t * 3), 10);
+          meshRef.current.scale.setScalar((node.scale || 1) * (1 + beat * 0.5));
+          break;
+        case 'wave':
+          meshRef.current.position.x += 0.02 * speed;
+          meshRef.current.position.y += Math.sin(t * 5) * 0.1 * speed;
+          break;
+        case 'breathe':
+          meshRef.current.scale.setScalar((node.scale || 1) * (1 + Math.sin(t * 2) * 0.2));
+          break;
+        case 'flicker':
+          meshRef.current.visible = Math.random() > 0.5;
+          break;
+        case 'glitch':
+          if (Math.random() > 0.9) {
+            meshRef.current.position.x += (Math.random() - 0.5) * 2;
+            meshRef.current.position.y += (Math.random() - 0.5) * 2;
+            meshRef.current.position.z += (Math.random() - 0.5) * 2;
+          }
+          break;
+        case 'orbit_elliptical':
+          if (node.motionTargetId) {
+            const target = nodes.find((n: NodeData) => n.id === node.motionTargetId);
+            if (target) {
+              const scale = 0.05;
+              const tx = (target.x - window.innerWidth / 2) * scale;
+              const ty = -(target.y - window.innerHeight / 2) * scale;
+              const tz = (target.z || 0) * scale;
+              meshRef.current.position.x = tx + Math.cos(t) * 15;
+              meshRef.current.position.z = tz + Math.sin(t) * 5;
+              meshRef.current.position.y = ty;
+            }
+          }
+          break;
+        case 'spring':
+          meshRef.current.position.y += Math.sin(t * 10) * Math.exp(-(t % 2)) * 0.2 * speed;
+          break;
+        case 'orbit_figure_eight':
+          if (node.motionTargetId) {
+            const target = nodes.find((n: NodeData) => n.id === node.motionTargetId);
+            if (target) {
+              const scale = 0.05;
+              const tx = (target.x - window.innerWidth / 2) * scale;
+              const ty = -(target.y - window.innerHeight / 2) * scale;
+              const tz = (target.z || 0) * scale;
+              meshRef.current.position.x = tx + Math.sin(t) * 10;
+              meshRef.current.position.z = tz + Math.sin(t * 2) * 5;
+              meshRef.current.position.y = ty;
+            }
+          }
+          break;
+        case 'chase':
+          if (node.motionTargetId) {
+            const target = nodes.find((n: NodeData) => n.id === node.motionTargetId);
+            if (target) {
+              const scale = 0.05;
+              const tx = (target.x - window.innerWidth / 2) * scale;
+              const ty = -(target.y - window.innerHeight / 2) * scale;
+              const tz = (target.z || 0) * scale;
+              const dx = tx - meshRef.current.position.x;
+              const dy = ty - meshRef.current.position.y;
+              const dz = tz - meshRef.current.position.z;
+              meshRef.current.position.x += dx * 0.05 * speed;
+              meshRef.current.position.y += dy * 0.05 * speed;
+              meshRef.current.position.z += dz * 0.05 * speed;
+            }
+          }
+          break;
+        case 'flee':
+          if (node.motionTargetId) {
+            const target = nodes.find((n: NodeData) => n.id === node.motionTargetId);
+            if (target) {
+              const scale = 0.05;
+              const tx = (target.x - window.innerWidth / 2) * scale;
+              const ty = -(target.y - window.innerHeight / 2) * scale;
+              const tz = (target.z || 0) * scale;
+              const dx = meshRef.current.position.x - tx;
+              const dy = meshRef.current.position.y - ty;
+              const dz = meshRef.current.position.z - tz;
+              const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (dist < 20) {
+                meshRef.current.position.x += (dx / dist) * 0.1 * speed;
+                meshRef.current.position.y += (dy / dist) * 0.1 * speed;
+                meshRef.current.position.z += (dz / dist) * 0.1 * speed;
+              }
+            }
+          }
+          break;
+        case 'wander':
+          meshRef.current.position.x += (Math.sin(t * 0.5) * 0.05 + Math.cos(t * 1.2) * 0.02) * speed;
+          meshRef.current.position.y += (Math.cos(t * 0.7) * 0.05 + Math.sin(t * 1.5) * 0.02) * speed;
+          meshRef.current.position.z += (Math.sin(t * 0.9) * 0.05 + Math.cos(t * 1.1) * 0.02) * speed;
+          break;
+        case 'pulse_wave':
+          meshRef.current.scale.setScalar((node.scale || 1) * (1 + Math.sin(meshRef.current.position.x * 0.5 + t * 5) * 0.3));
+          break;
+        case 'spin_cycle':
+          meshRef.current.position.x += Math.cos(t * 5) * 0.05 * speed;
+          meshRef.current.position.z += Math.sin(t * 5) * 0.05 * speed;
+          meshRef.current.rotation.y += 0.1 * speed;
+          break;
+        case 'orbit_eccentric':
+          if (node.motionTargetId) {
+            const target = nodes.find((n: NodeData) => n.id === node.motionTargetId);
+            if (target) {
+              const scale = 0.05;
+              const tx = (target.x - window.innerWidth / 2) * scale;
+              const ty = -(target.y - window.innerHeight / 2) * scale;
+              const tz = (target.z || 0) * scale;
+              const r = 5 + Math.sin(t * 3) * 3;
+              meshRef.current.position.x = tx + Math.cos(t) * r;
+              meshRef.current.position.z = tz + Math.sin(t) * r;
+              meshRef.current.position.y = ty;
+            }
+          }
+          break;
+        case 'gravity_well': {
+          const gdx = -meshRef.current.position.x;
+          const gdy = -meshRef.current.position.y;
+          const gdz = -meshRef.current.position.z;
+          const gDist = Math.sqrt(gdx * gdx + gdy * gdy + gdz * gdz);
+          let gvx = node.velocity?.x || 0;
+          let gvy = node.velocity?.y || 0;
+          let gvz = node.velocity?.z || 0;
+          if (gDist > 2) {
+            gvx += (gdx / gDist) * 0.01 * speed;
+            gvy += (gdy / gDist) * 0.01 * speed;
+            gvz += (gdz / gDist) * 0.01 * speed;
+          } else {
+            gvx = (Math.random() - 0.5) * 1 * speed;
+            gvy = (Math.random() - 0.5) * 1 * speed;
+            gvz = (Math.random() - 0.5) * 1 * speed;
+          }
+          meshRef.current.position.x += gvx;
+          meshRef.current.position.y += gvy;
+          meshRef.current.position.z += gvz;
+          node.velocity = { x: gvx, y: gvy, z: gvz };
+          break;
+        }
+        case 'magnetic': {
+          let mx = meshRef.current.position.x;
+          let my = meshRef.current.position.y;
+          let mz = meshRef.current.position.z;
+          const scale = 0.05;
+          nodes.forEach((other: NodeData) => {
+            if (other.id !== node.id) {
+              const ox = (other.x - window.innerWidth / 2) * scale;
+              const oy = -(other.y - window.innerHeight / 2) * scale;
+              const oz = (other.z || 0) * scale;
+              const dx = ox - mx;
+              const dy = oy - my;
+              const dz = oz - mz;
+              const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (dist > 0 && dist < 10) {
+                mx += (dx / dist) * 0.01 * speed;
+                my += (dy / dist) * 0.01 * speed;
+                mz += (dz / dist) * 0.01 * speed;
+              }
+            }
+          });
+          meshRef.current.position.x = mx;
+          meshRef.current.position.y = my;
+          meshRef.current.position.z = mz;
+          break;
+        }
+        case 'repel': {
+          let rx = meshRef.current.position.x;
+          let ry = meshRef.current.position.y;
+          let rz = meshRef.current.position.z;
+          const scale = 0.05;
+          nodes.forEach((other: NodeData) => {
+            if (other.id !== node.id) {
+              const ox = (other.x - window.innerWidth / 2) * scale;
+              const oy = -(other.y - window.innerHeight / 2) * scale;
+              const oz = (other.z || 0) * scale;
+              const dx = rx - ox;
+              const dy = ry - oy;
+              const dz = rz - oz;
+              const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              if (dist > 0 && dist < 5) {
+                rx += (dx / dist) * 0.05 * speed;
+                ry += (dy / dist) * 0.05 * speed;
+                rz += (dz / dist) * 0.05 * speed;
+              }
+            }
+          });
+          meshRef.current.position.x = rx;
+          meshRef.current.position.y = ry;
+          meshRef.current.position.z = rz;
+          break;
+        }
+        case 'orbit_wobble':
+          if (node.motionTargetId) {
+            const target = nodes.find((n: NodeData) => n.id === node.motionTargetId);
+            if (target) {
+              const scale = 0.05;
+              const tx = (target.x - window.innerWidth / 2) * scale;
+              const ty = -(target.y - window.innerHeight / 2) * scale;
+              const tz = (target.z || 0) * scale;
+              meshRef.current.position.x = tx + Math.cos(t) * 10 + Math.sin(t * 10) * 1;
+              meshRef.current.position.z = tz + Math.sin(t) * 10 + Math.cos(t * 10) * 1;
+              meshRef.current.position.y = ty + Math.sin(t * 5) * 2;
+            }
+          }
+          break;
+        case 'tornado':
+          const torRadius = (t % 5) * 2;
+          meshRef.current.position.x += Math.cos(t * 10) * torRadius * 0.01 * speed;
+          meshRef.current.position.z += Math.sin(t * 10) * torRadius * 0.01 * speed;
+          meshRef.current.position.y += 0.05 * speed;
+          break;
+        case 'float_away':
+          meshRef.current.position.y += 0.02 * speed;
+          meshRef.current.position.x += Math.sin(t) * 0.02 * speed;
+          break;
+        case 'sink':
+          meshRef.current.position.y -= 0.02 * speed;
+          meshRef.current.position.x += Math.sin(t) * 0.02 * speed;
+          break;
+        case 'teleport':
+          if (Math.random() > 0.98) {
+            meshRef.current.position.x = (Math.random() - 0.5) * 40;
+            meshRef.current.position.y = (Math.random() - 0.5) * 40;
+            meshRef.current.position.z = (Math.random() - 0.5) * 40;
+          }
+          break;
       }
     }
 
@@ -204,19 +447,49 @@ const Node3D = ({ node, nodes, isSelected, isMatch, onSelect, onDragEnd, onConne
   ];
 
   return (
-    <group ref={meshRef} position={position} rotation={rotation} scale={node.scale || 1}>
+    <group 
+      ref={meshRef} 
+      position={position} 
+      rotation={rotation} 
+      scale={node.scale || 1}
+      onPointerOver={(e) => { e.stopPropagation(); setIsHovered(true); }}
+      onPointerOut={(e) => { e.stopPropagation(); setIsHovered(false); }}
+    >
       <group onClick={() => onSelect(node.id)}>
-        {isSelected && (
-          <Sphere args={[5, 32, 32]}>
-            <meshStandardMaterial 
-              color="#00f3ff" 
-              transparent 
-              opacity={0.3} 
-              emissive="#00f3ff" 
-              emissiveIntensity={2} 
-              side={THREE.BackSide}
-            />
-          </Sphere>
+        {(isSelected || isHovered) && (
+          <group>
+            <Sphere args={[5, 32, 32]}>
+              <meshStandardMaterial 
+                color={isSelected ? "#00f3ff" : "#9d50bb"} 
+                transparent 
+                opacity={isSelected ? 0.3 : 0.15} 
+                emissive={isSelected ? "#00f3ff" : "#9d50bb"} 
+                emissiveIntensity={isSelected ? 2 : 1} 
+                side={THREE.BackSide}
+              />
+            </Sphere>
+            {/* Holographic Base */}
+            <Cylinder args={[3, 3, 0.2, 32]} position={[0, -2, 0]}>
+              <meshStandardMaterial 
+                color="#00f3ff" 
+                transparent 
+                opacity={0.4} 
+                emissive="#00f3ff" 
+                emissiveIntensity={2} 
+                wireframe
+              />
+            </Cylinder>
+            {/* Floating Particles */}
+            {[...Array(5)].map((_, i) => (
+              <Sphere key={i} args={[0.1, 8, 8]} position={[
+                Math.sin(i * 1.2) * 4,
+                Math.cos(i * 0.8) * 4,
+                Math.sin(i * 2.1) * 4
+              ]}>
+                <meshStandardMaterial color="#00f3ff" emissive="#00f3ff" emissiveIntensity={5} />
+              </Sphere>
+            ))}
+          </group>
         )}
         {/* 3D Geometry removed as per user request */}
         
@@ -291,6 +564,7 @@ const Connections3D = ({ connections, nodes }: { connections: Connection[], node
             lineWidth={2}
             transparent
             opacity={0.5}
+            raycast={() => null}
           />
         );
       })}
@@ -313,6 +587,7 @@ const Trails3D = ({ nodes }: { nodes: NodeData[] }) => {
           dashScale={2}
           dashSize={0.5}
           gapSize={0.5}
+          raycast={() => null}
         />
       ))}
     </group>
@@ -322,13 +597,24 @@ const Trails3D = ({ nodes }: { nodes: NodeData[] }) => {
 export function Universe3D(props: Universe3DProps) {
   return (
     <div className="absolute inset-0 w-full h-full bg-black">
-      <Canvas camera={{ position: [0, 0, 50], fov: 60 }}>
+      <Canvas camera={{ position: [0, 0, 50], fov: 60 }} dpr={[1, 2]} performance={{ min: 0.5 }}>
         <color attach="background" args={[props.envSettings.backgroundColor || '#050505']} />
         <ambientLight intensity={0.5} />
         <pointLight position={[10, 10, 10]} intensity={1} />
         
         <Skybox settings={props.envSettings} />
         <EnclosedBox settings={props.envSettings} />
+        
+        <TerrainGenerator 
+          enabled={props.envSettings.terrain?.enabled}
+          seed={props.envSettings.terrain?.seed}
+          scale={props.envSettings.terrain?.scale}
+          height={props.envSettings.terrain?.height}
+          color={props.envSettings.terrain?.color}
+          wireframe={props.envSettings.terrain?.wireframe}
+          animate={props.envSettings.terrain?.animate}
+          speed={props.envSettings.terrain?.speed}
+        />
         
         <Trails3D nodes={props.nodes} />
         
@@ -359,16 +645,7 @@ export function Universe3D(props: Universe3DProps) {
           />
         ))}
         
-        <OrbitControls 
-          makeDefault 
-          enableDamping 
-          dampingFactor={0.05} 
-          rotateSpeed={1.0} 
-          enablePan={true}
-          panSpeed={0.8}
-          minDistance={10}
-          maxDistance={200}
-        />
+        <CameraController selectedNode={props.selectedNode} nodes={props.nodes} />
       </Canvas>
     </div>
   );

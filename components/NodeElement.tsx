@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { SearchNodeContent } from './SearchNodeContent';
-import { Globe, Search, Minimize2, Maximize2, X, ExternalLink, RefreshCw, Code, Play, Pause, Square, RotateCw, Vibrate, Activity, ArrowUpCircle, ArrowDownCircle, Link2, Settings2, Layout } from 'lucide-react';
+import { PollinationsNodeContent } from './PollinationsNodeContent';
+import { Globe, Search, Minimize2, Maximize2, X, ExternalLink, RefreshCw, Code, Play, Pause, Square, RotateCw, Vibrate, Activity, ArrowUpCircle, ArrowDownCircle, Link2, Settings2, Layout, Sparkles, Zap } from 'lucide-react';
 import { WidgetType, DashboardWidget } from '../types';
-import { VideoWidget, MetricWidget, LogStreamWidget, TaskProgressWidget, NexusVolumeWidget, SocketStreamWidget, WeatherWidget, DigitalClockWidget, CpuUsageWidget, NetworkTrafficWidget, StockTickerWidget, NewsFeedWidget } from './Widgets';
+import * as Widgets from './Widgets';
+import * as MoreWidgets from './MoreWidgets';
+import { generateZimCode } from '../services/geminiService';
 
-export type NodeType = 'core' | 'image' | 'video' | 'gif' | 'code' | 'text' | '3d' | 'search' | 'webpage' | 'embed' | 'zim' | 'widget';
+export type NodeType = 'core' | 'image' | 'video' | 'gif' | 'code' | 'text' | '3d' | 'search' | 'webpage' | 'embed' | 'zim' | 'widget' | 'pollinations';
+
+export type MotionType = 'none' | 'orbit' | 'random' | 'zigzag' | 'pop' | 'bounce' | 'slow_trail' | 'figure_eight' | 'pendulum' | 'spiral' | 'heartbeat' | 'wave' | 'breathe' | 'flicker' | 'glitch' | 'orbit_elliptical' | 'spring' | 'orbit_figure_eight' | 'chase' | 'flee' | 'wander' | 'pulse_wave' | 'spin_cycle' | 'orbit_eccentric' | 'gravity_well' | 'magnetic' | 'repel' | 'orbit_wobble' | 'tornado' | 'float_away' | 'sink' | 'teleport';
 
 export interface NodeData {
   id: string;
@@ -24,7 +29,7 @@ export interface NodeData {
   animationState?: 'playing' | 'paused' | 'stopped';
   widgetType?: WidgetType;
   shape?: 'sphere' | 'box' | 'cylinder' | 'torus' | 'cone';
-  motionType?: 'none' | 'orbit' | 'random' | 'zigzag' | 'pop' | 'bounce' | 'slow_trail';
+  motionType?: MotionType;
   motionTargetId?: string;
   motionSpeed?: number;
   motionDirection?: 1 | -1;
@@ -37,6 +42,7 @@ interface NodeElementProps {
   node: NodeData;
   nodes: NodeData[];
   isSelected: boolean;
+  isConnectingTarget?: boolean;
   isMatch?: boolean;
   disableDrag?: boolean;
   onSelect: (id: string) => void;
@@ -46,14 +52,23 @@ interface NodeElementProps {
   onLinkExisting?: (sourceId: string, targetId: string) => void;
   onDelete?: (id: string) => void;
   onUpdateNode?: (id: string, data: Partial<NodeData>) => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
-export function NodeElement({ node, nodes, isSelected, isMatch, disableDrag, onSelect, onDragEnd, onConnectStart, onCreateAndLink, onLinkExisting, onDelete, onUpdateNode }: NodeElementProps) {
+export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMatch, disableDrag, onSelect, onDragEnd, onConnectStart, onCreateAndLink, onLinkExisting, onDelete, onUpdateNode, onMouseEnter, onMouseLeave }: NodeElementProps) {
   const [isMinimized, setIsMinimized] = useState(false);
   const [useProxy, setUseProxy] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [menuTab, setMenuTab] = useState<'main' | 'animate' | 'transform'>('main');
   const [lastPinchDist, setLastPinchDist] = useState<number | null>(null);
+  const [isEditingZim, setIsEditingZim] = useState(false);
+  const [isGeneratingZim, setIsGeneratingZim] = useState(false);
+  const [zimCode, setZimCode] = useState(node.content || '');
+
+  React.useEffect(() => {
+    setZimCode(node.content || '');
+  }, [node.content]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
@@ -90,6 +105,42 @@ export function NodeElement({ node, nodes, isSelected, isMatch, disableDrag, onS
   const handleDragEnd = (e: any, info: any) => {
     if (disableDrag) return;
     onDragEnd(node.id, node.x + info.offset.x, node.y + info.offset.y);
+  };
+
+  const handleResizeDrag = (e: any, info: any, corner: string) => {
+    e.stopPropagation();
+    if (!onUpdateNode) return;
+    
+    const delta = (info.delta.x + info.delta.y) * 0.01;
+    let scaleChange = 0;
+    
+    if (corner === 'br') scaleChange = delta;
+    if (corner === 'tl') scaleChange = -delta;
+    if (corner === 'tr') scaleChange = (info.delta.x - info.delta.y) * 0.01;
+    if (corner === 'bl') scaleChange = (-info.delta.x + info.delta.y) * 0.01;
+    
+    const newScale = Math.min(Math.max((node.scale || 1) + scaleChange, 0.2), 5);
+    onUpdateNode(node.id, { scale: newScale });
+  };
+
+  const handleRotateDrag = (e: any, info: any) => {
+    e.stopPropagation();
+    if (!onUpdateNode) return;
+    
+    const delta = info.delta.x;
+    const newRotation = (node.rotationZ || 0) + delta;
+    onUpdateNode(node.id, { rotationZ: newRotation });
+  };
+
+  const handleTiltDrag = (e: any, info: any) => {
+    e.stopPropagation();
+    if (!onUpdateNode) return;
+    
+    const deltaX = info.delta.x;
+    const deltaY = info.delta.y;
+    const newRotationY = (node.rotationY || 0) + deltaX;
+    const newRotationX = (node.rotationX || 0) - deltaY;
+    onUpdateNode(node.id, { rotationY: newRotationY, rotationX: newRotationX });
   };
 
   const formatUrl = (url?: string) => {
@@ -212,6 +263,29 @@ export function NodeElement({ node, nodes, isSelected, isMatch, disableDrag, onS
             </div>
             {!isMinimized && (
               <SearchNodeContent node={node} nodes={nodes} onCreateAndLink={onCreateAndLink} onLinkExisting={onLinkExisting} />
+            )}
+          </div>
+        );
+        break;
+      case 'pollinations':
+        content = (
+          <div className={`p-3 w-64 ${isMinimized ? 'h-auto' : 'h-80'} shadow-lg transition-all hover:border-neon-blue flex flex-col ${isSelected ? 'selected-node' : ''}`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 pointer-events-none">
+                <Zap size={16} className="text-neon-blue" />
+                <h3 className="text-sm font-bold text-white truncate">{node.title || 'Pollinations AI'}</h3>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onPointerDownCapture={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized); }} className="text-gray-400 hover:text-white p-1 pointer-events-auto">
+                  {isMinimized ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
+                </button>
+                <button onPointerDownCapture={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onDelete?.(node.id); }} className="text-gray-400 hover:text-red-500 p-1 pointer-events-auto">
+                  <X size={12} />
+                </button>
+              </div>
+            </div>
+            {!isMinimized && (
+              <PollinationsNodeContent node={node} onUpdateNode={onUpdateNode} />
             )}
           </div>
         );
@@ -349,6 +423,7 @@ export function NodeElement({ node, nodes, isSelected, isMatch, disableDrag, onS
     <style>
       body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background: transparent; }
     </style>
+    <script src="https://zimjs.org/cdn/nft/016/zim_three.js"></script>
     <script type="module">
       import "https://zimjs.org/cdn/019/zim";
       
@@ -364,11 +439,13 @@ export function NodeElement({ node, nodes, isSelected, isMatch, disableDrag, onS
         const S = stage;
         const W = stageW;
         const H = stageH;
+        const F = frame;
         
         // Also provide them globally just in case
         window.S = stage;
         window.W = stageW;
         window.H = stageH;
+        window.F = frame;
         
         try {
           // The user's code is injected directly here
@@ -396,6 +473,9 @@ export function NodeElement({ node, nodes, isSelected, isMatch, disableDrag, onS
                 <h3 className="text-xs font-bold text-white truncate">{node.title || 'ZIM Interactive'}</h3>
               </div>
               <div className="flex items-center gap-1">
+                <button onPointerDownCapture={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setIsEditingZim(!isEditingZim); }} className={`text-gray-400 hover:text-white p-1 pointer-events-auto ${isEditingZim ? 'text-neon-pink' : ''}`} title="Edit Code">
+                  <Code size={12} />
+                </button>
                 <button onPointerDownCapture={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized); }} className="text-gray-400 hover:text-white p-1 pointer-events-auto" title={isMinimized ? "Maximize" : "Minimize"}>
                   {isMinimized ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
                 </button>
@@ -405,13 +485,47 @@ export function NodeElement({ node, nodes, isSelected, isMatch, disableDrag, onS
               </div>
             </div>
             {!isMinimized && (
-              <div className="flex-1 bg-space-900/50 rounded border border-white/10 overflow-hidden relative pointer-events-auto" onPointerDownCapture={(e) => e.stopPropagation()} onWheelCapture={(e) => e.stopPropagation()}>
-                <iframe 
-                  srcDoc={zimSrcDoc}
-                  title={node.title || 'ZIM'}
-                  className="w-full h-full border-0 bg-transparent"
-                  sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-                />
+              <div className="flex-1 bg-space-900/50 rounded border border-white/10 overflow-hidden relative pointer-events-auto flex flex-col" onPointerDownCapture={(e) => e.stopPropagation()} onWheelCapture={(e) => e.stopPropagation()}>
+                {isEditingZim ? (
+                  <div className="flex flex-col h-full p-2 gap-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-gray-400 uppercase tracking-wider">ZIMjs Code</span>
+                      <button 
+                        onClick={async () => {
+                          if (!node.title) return;
+                          setIsGeneratingZim(true);
+                          const code = await generateZimCode(node.title);
+                          setZimCode(code);
+                          if (onUpdateNode) onUpdateNode(node.id, { content: code });
+                          setIsGeneratingZim(false);
+                        }}
+                        disabled={isGeneratingZim || !node.title}
+                        className="text-[10px] bg-neon-purple/20 text-neon-purple px-2 py-0.5 rounded hover:bg-neon-purple/40 disabled:opacity-50 flex items-center gap-1 transition-all"
+                      >
+                        {isGeneratingZim ? <RefreshCw size={10} className="animate-spin" /> : <Sparkles size={10} />}
+                        AI Assist
+                      </button>
+                    </div>
+                    <textarea 
+                      value={zimCode}
+                      onChange={(e) => setZimCode(e.target.value)}
+                      onBlur={() => {
+                        if (onUpdateNode && zimCode !== node.content) {
+                          onUpdateNode(node.id, { content: zimCode });
+                        }
+                      }}
+                      className="flex-1 w-full bg-black/50 border border-white/10 rounded p-2 text-[10px] font-mono text-neon-blue focus:outline-none focus:border-neon-pink resize-none custom-scrollbar"
+                      placeholder="new Circle(100, 'purple').center().drag();"
+                    />
+                  </div>
+                ) : (
+                  <iframe 
+                    srcDoc={zimSrcDoc}
+                    title={node.title || 'ZIM'}
+                    className="w-full h-full border-0 bg-transparent"
+                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                  />
+                )}
               </div>
             )}
           </div>
@@ -440,19 +554,15 @@ export function NodeElement({ node, nodes, isSelected, isMatch, disableDrag, onS
               </div>
             </div>
             <div className="flex-1 h-[calc(100%-28px)] relative">
-              {node.widgetType === 'VIDEO' && <VideoWidget widget={widgetData} />}
-              {node.widgetType === 'METRIC' && <MetricWidget widget={widgetData} />}
-              {node.widgetType === 'LOG_STREAM' && <LogStreamWidget widget={widgetData} />}
-              {node.widgetType === 'TASK_PROGRESS' && <TaskProgressWidget widget={widgetData} />}
-              {node.widgetType === 'NEXUS_VOLUME' && <NexusVolumeWidget widget={widgetData} />}
-              {node.widgetType === 'SOCKET_STREAM' && <SocketStreamWidget widget={widgetData} />}
-              {node.widgetType === 'WEATHER' && <WeatherWidget widget={widgetData} />}
-              {node.widgetType === 'CLOCK' && <DigitalClockWidget widget={widgetData} />}
-              {node.widgetType === 'CPU_USAGE' && <CpuUsageWidget widget={widgetData} />}
-              {node.widgetType === 'NETWORK_TRAFFIC' && <NetworkTrafficWidget widget={widgetData} />}
-              {node.widgetType === 'STOCK_TICKER' && <StockTickerWidget widget={widgetData} />}
-              {node.widgetType === 'NEWS_FEED' && <NewsFeedWidget widget={widgetData} />}
-              {!node.widgetType && <MetricWidget widget={widgetData} />}
+              {(() => {
+                const type = node.widgetType || 'METRIC';
+                const componentName = type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('') + 'Widget';
+                const WidgetComponent = (Widgets as any)[componentName] || (MoreWidgets as any)[componentName];
+                if (WidgetComponent) {
+                  return <WidgetComponent widget={widgetData} />;
+                }
+                return <div className="p-4 text-red-500">Unknown widget type: {type}</div>;
+              })()}
             </div>
           </div>
         );
@@ -525,6 +635,7 @@ export function NodeElement({ node, nodes, isSelected, isMatch, disableDrag, onS
       transition={getTransitionProps()}
       className={`absolute cursor-grab active:cursor-grabbing pointer-events-auto 
         ${isSelected ? 'ring-4 ring-neon-blue rounded-xl shadow-[0_0_40px_rgba(0,243,255,0.8)]' : ''} 
+        ${isConnectingTarget ? 'ring-4 ring-emerald-400 rounded-xl shadow-[0_0_30px_rgba(52,211,153,0.6)] animate-pulse' : ''}
         ${isMatch ? 'ring-4 ring-neon-purple rounded-xl shadow-[0_0_30px_rgba(157,80,187,0.6)]' : ''}`}
       style={{ zIndex: isSelected || isMatch ? 50 : 10, transformStyle: 'preserve-3d' }}
       onPointerDown={(e) => {
@@ -540,8 +651,55 @@ export function NodeElement({ node, nodes, isSelected, isMatch, disableDrag, onS
         e.stopPropagation();
         onConnectStart(node.id, e);
       }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       {renderContent()}
+
+      {isSelected && (
+        <>
+          {/* Top Left */}
+          <motion.div 
+            onPan={(e, info) => handleResizeDrag(e, info, 'tl')}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute -top-3 -left-3 w-6 h-6 bg-white border-2 border-neon-blue cursor-nwse-resize z-50 rounded-sm hover:bg-neon-blue hover:scale-110 transition-transform"
+          />
+          {/* Top Right */}
+          <motion.div 
+            onPan={(e, info) => handleResizeDrag(e, info, 'tr')}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute -top-3 -right-3 w-6 h-6 bg-white border-2 border-neon-blue cursor-nesw-resize z-50 rounded-sm hover:bg-neon-blue hover:scale-110 transition-transform"
+          />
+          {/* Bottom Left */}
+          <motion.div 
+            onPan={(e, info) => handleResizeDrag(e, info, 'bl')}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute -bottom-3 -left-3 w-6 h-6 bg-white border-2 border-neon-blue cursor-nesw-resize z-50 rounded-sm hover:bg-neon-blue hover:scale-110 transition-transform"
+          />
+          {/* Bottom Right */}
+          <motion.div 
+            onPan={(e, info) => handleResizeDrag(e, info, 'br')}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute -bottom-3 -right-3 w-6 h-6 bg-white border-2 border-neon-blue cursor-nwse-resize z-50 rounded-sm hover:bg-neon-blue hover:scale-110 transition-transform"
+          />
+          {/* Rotate Handle */}
+          <motion.div 
+            onPan={handleRotateDrag}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute -top-10 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-neon-purple cursor-ew-resize z-50 hover:bg-neon-purple hover:scale-110 transition-transform flex items-center justify-center"
+          >
+            <RotateCw size={12} className="text-black" />
+          </motion.div>
+          {/* Tilt Handle */}
+          <motion.div 
+            onPan={handleTiltDrag}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute -bottom-10 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-neon-pink cursor-move z-50 hover:bg-neon-pink hover:scale-110 transition-transform flex items-center justify-center"
+          >
+            <Layout size={12} className="text-black" />
+          </motion.div>
+        </>
+      )}
 
       {isSelected && showMenu && (
         <motion.div 

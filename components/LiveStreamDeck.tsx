@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DashboardWidget } from '../types';
+import * as Widgets from './Widgets';
+import * as MoreWidgets from './MoreWidgets';
 
 interface LiveStreamDeckProps {
     widgets: DashboardWidget[];
@@ -61,211 +63,15 @@ export const LiveStreamDeck: React.FC<LiveStreamDeckProps> = ({ widgets, onAddWi
     };
 
     // --- WIDGET RENDERERS ---
-    const VideoWidget = ({ widget }: { widget: DashboardWidget }) => (
-        <div className="w-full h-full flex flex-col pointer-events-none">
-             <div className="relative flex-1 bg-black overflow-hidden group">
-                 <div className="absolute inset-0 z-10 border-[0.5px] border-neon-blue/10 bg-[linear-gradient(45deg,transparent_25%,rgba(0,243,255,0.05)_50%,transparent_75%)] bg-[length:250%_250%] animate-blob"></div>
-                 <div className="absolute top-2 right-2 z-20 flex gap-1">
-                     <div className="w-1 h-1 bg-red-500 rounded-full animate-pulse"></div>
-                     <span className="text-[8px] text-red-500 font-mono">LIVE</span>
-                 </div>
-                 {widget.sourceUrl ? (
-                     <iframe 
-                        src={widget.sourceUrl} 
-                        className="w-full h-full object-cover opacity-80 pointer-events-auto"
-                        allow="autoplay; encrypted-media; picture-in-picture"
-                        title={widget.title}
-                     />
-                 ) : (
-                     <div className="w-full h-full flex items-center justify-center text-neon-blue/30 font-display text-xs animate-pulse">NO SIGNAL</div>
-                 )}
-             </div>
-        </div>
-    );
-
-    const MetricWidget = ({ widget }: { widget: DashboardWidget }) => {
-        const [value, setValue] = useState(0);
-        useEffect(() => {
-            const interval = setInterval(() => setValue(Math.random() * 100), widget.refreshRate || 1000);
-            return () => clearInterval(interval);
-        }, [widget.refreshRate]);
-        return (
-            <div className="w-full h-full flex flex-col items-center justify-center relative pointer-events-none">
-                 <svg className="w-3/4 h-3/4 transform -rotate-90" viewBox="0 0 100 100">
-                     <circle cx="50" cy="50" r="40" stroke="#1a1a1a" strokeWidth="8" fill="transparent" />
-                     <circle cx="50" cy="50" r="40" stroke="#00f3ff" strokeWidth="8" fill="transparent" strokeDasharray={251.2} strokeDashoffset={251.2 - (251.2 * value) / 100} className="transition-all duration-500 ease-out" />
-                 </svg>
-                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                     <span className="text-xl md:text-3xl font-mono text-white font-bold">{Math.round(value)}</span>
-                     <span className="text-[10px] text-neon-blue tracking-wider">%</span>
-                 </div>
-            </div>
-        );
-    };
-
-    const LogStreamWidget = ({ widget }: { widget: DashboardWidget }) => {
-        const [logs, setLogs] = useState<{ id: string, text: string }[]>([]);
-        const endRef = useRef<HTMLDivElement>(null);
-        useEffect(() => {
-            const interval = setInterval(() => {
-                const actions = ['FETCH', 'DECRYPT', 'SYNC', 'PING', 'BUFFER', 'OPT'];
-                const newLog = `[${new Date().toLocaleTimeString().split(' ')[0]}] ${actions[Math.floor(Math.random()*actions.length)]}::${Math.floor(Math.random()*999)}`;
-                setLogs(prev => [...prev.slice(-8), { id: `log-${Date.now()}-${Math.random()}`, text: newLog }]);
-            }, 800);
-            return () => clearInterval(interval);
-        }, []);
-        return (
-            <div className="w-full h-full bg-black/50 p-2 font-mono text-[10px] text-neon-green/80 overflow-hidden flex flex-col relative pointer-events-none">
-                <div className="flex-1 overflow-hidden space-y-1 mt-1">
-                    {logs.map((log) => <div key={log.id} className="border-b border-white/5 pb-0.5 truncate">{log.text}</div>)}
-                </div>
-            </div>
-        );
-    };
-
-    const TaskProgressWidget = ({ widget }: { widget: DashboardWidget }) => {
-        const [progress, setProgress] = useState(45);
-        useEffect(() => {
-            const interval = setInterval(() => setProgress(p => (p >= 100 ? 0 : p + 1)), 200);
-            return () => clearInterval(interval);
-        }, []);
-        return (
-             <div className="w-full h-full flex flex-col justify-center gap-2 px-4 pointer-events-none">
-                 <div className="flex justify-between text-xs text-neon-pink font-display tracking-widest"><span>{widget.title}</span><span>{progress}%</span></div>
-                 <div className="w-full h-4 bg-gray-900 border border-neon-pink/30 skew-x-[-12deg] p-0.5">
-                     <div className="h-full bg-neon-pink shadow-[0_0_10px_#ff00ff] transition-all duration-200" style={{ width: `${progress}%` }}></div>
-                 </div>
-             </div>
-        );
-    };
-
-    const NexusVolumeWidget = ({ widget }: { widget: DashboardWidget }) => {
-        const canvasRef = useRef<HTMLCanvasElement>(null);
-
-        // Simple starfield/volume simulation for the map part
-        useEffect(() => {
-            const canvas = canvasRef.current;
-            if(!canvas) return;
-            const ctx = canvas.getContext('2d');
-            if(!ctx) return;
-            
-            let w = canvas.width = canvas.parentElement?.clientWidth || 300;
-            let h = canvas.height = canvas.parentElement?.clientHeight || 200;
-            
-            const particles = Array.from({length: 50}, () => ({
-                x: Math.random() * w, y: Math.random() * h, r: Math.random() * 2, speed: Math.random() * 0.5
-            }));
-
-            const animate = () => {
-                ctx.clearRect(0,0,w,h);
-                // Grid
-                ctx.strokeStyle = "rgba(34, 211, 238, 0.1)";
-                ctx.beginPath();
-                for(let i=0; i<w; i+=40) { ctx.moveTo(i,0); ctx.lineTo(i,h); }
-                for(let i=0; i<h; i+=40) { ctx.moveTo(0,i); ctx.lineTo(w,i); }
-                ctx.stroke();
-
-                // Particles
-                ctx.fillStyle = "#22d3ee";
-                particles.forEach(p => {
-                    p.y -= p.speed;
-                    if(p.y < 0) p.y = h;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-                    ctx.fill();
-                });
-                requestAnimationFrame(animate);
-            };
-            const id = requestAnimationFrame(animate);
-            
-            const resize = () => {
-                if(canvas.parentElement) {
-                    w = canvas.width = canvas.parentElement.clientWidth;
-                    h = canvas.height = canvas.parentElement.clientHeight;
-                }
-            };
-            window.addEventListener('resize', resize);
-            return () => { cancelAnimationFrame(id); window.removeEventListener('resize', resize); };
-        }, []);
-
-        return (
-            <div className="w-full h-full bg-zinc-950 text-zinc-300 font-mono overflow-auto p-4 custom-scrollbar pointer-events-auto">
-                <style>{`
-                    .glass-panel { background: rgba(9, 9, 11, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
-                    .text-glow { text-shadow: 0 0 20px rgba(34, 211, 238, 0.3); }
-                    .animate-float { animation: float 6s ease-in-out infinite; }
-                    @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-5px); } }
-                `}</style>
-                
-                {/* Header */}
-                <header className="flex w-full items-center justify-between glass-panel rounded-lg p-2 mb-4">
-                    <div className="flex items-center gap-2">
-                         <div className="h-6 w-6 rounded bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-                             <div className="text-white text-[10px]">NX</div>
-                         </div>
-                         <div>
-                             <h1 className="text-xs font-medium tracking-tight text-white uppercase leading-none">Nexus<span className="text-zinc-500">_Core</span></h1>
-                             <span className="text-[10px] text-cyan-500 tracking-wide">V.4.1.0</span>
-                         </div>
-                    </div>
-                </header>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* Controls */}
-                    <div className="glass-panel rounded-xl p-4 flex flex-col gap-4">
-                        <div className="flex justify-between items-start">
-                             <span className="text-[10px] text-zinc-500 uppercase">Total Volume</span>
-                             <span className="text-emerald-500 text-xs">▲</span>
-                        </div>
-                        <div className="text-xl font-medium text-white tracking-tight text-glow">$4,281,904</div>
-                        
-                        <div className="space-y-2">
-                             {['Time Scale', 'Depth', 'Amplitude'].map((label, i) => (
-                                 <div key={label} className="group">
-                                     <div className="flex justify-between text-[10px] mb-1">
-                                         <span className="text-zinc-400">{label}</span>
-                                         <span className="text-cyan-400">{60 + i*10}%</span>
-                                     </div>
-                                     <div className="h-1 w-full bg-zinc-800 rounded-full relative overflow-hidden">
-                                         <div className="absolute h-full bg-gradient-to-r from-cyan-600 to-cyan-400" style={{width: `${60+i*10}%`}}></div>
-                                     </div>
-                                 </div>
-                             ))}
-                        </div>
-                    </div>
-
-                    {/* Map Area */}
-                    <div className="glass-panel rounded-xl relative min-h-[150px] overflow-hidden flex flex-col">
-                        <div className="absolute top-2 left-2 z-10">
-                            <div className="text-[8px] text-zinc-500 uppercase">Sector View</div>
-                            <div className="text-sm font-medium text-white">Gin Ily <span className="text-cyan-400">215mn</span></div>
-                        </div>
-                        <canvas ref={canvasRef} className="w-full h-full bg-zinc-950/50" />
-                        
-                        {/* Floating Labels */}
-                        <div className="absolute top-1/2 left-1/4 animate-float pointer-events-none">
-                             <div className="px-1 bg-orange-500/10 border border-orange-500/50 rounded text-[8px] text-orange-200">PEAK_A12</div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Feed */}
-                <div className="glass-panel rounded-xl mt-4 p-2 space-y-2">
-                     <div className="text-[10px] text-zinc-400 uppercase tracking-widest flex items-center gap-2 border-b border-white/5 pb-2">
-                        <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></div> Live Inflow
-                     </div>
-                     {[1,2].map((val) => (
-                         <div key={val} className="flex items-center gap-2 p-1.5 rounded hover:bg-white/5 cursor-default">
-                             <div className="w-4 h-4 rounded bg-zinc-800 flex items-center justify-center border border-zinc-700 text-[8px] text-emerald-400">⚡</div>
-                             <div className="flex-1 min-w-0">
-                                 <div className="flex justify-between items-center"><span className="text-[10px] text-zinc-200">Volume Spike</span><span className="text-[8px] text-zinc-500">2s ago</span></div>
-                                 <div className="flex justify-between items-center"><span className="text-[8px] text-zinc-500">Sector 7G</span><span className="text-[8px] text-emerald-400">+450k</span></div>
-                             </div>
-                         </div>
-                     ))}
-                </div>
-            </div>
-        );
+    const renderWidget = (widget: DashboardWidget) => {
+        const AllWidgets: any = { ...Widgets, ...MoreWidgets };
+        // Convert type to component name, e.g., 'VIDEO' -> 'VideoWidget', 'RADAR_SWEEP' -> 'RadarSweepWidget'
+        const componentName = widget.type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('') + 'Widget';
+        const WidgetComponent = AllWidgets[componentName];
+        if (WidgetComponent) {
+            return <WidgetComponent widget={widget} />;
+        }
+        return <div className="text-white p-4">Unknown Widget Type: {widget.type}</div>;
     };
 
     // --- GLOBAL MOUSE/TOUCH HANDLERS ---
@@ -446,6 +252,63 @@ export const LiveStreamDeck: React.FC<LiveStreamDeckProps> = ({ widgets, onAddWi
                                 <option value="LOG_STREAM">API LOG STREAM</option>
                                 <option value="TASK_PROGRESS">TASK PROGRESS BAR</option>
                                 <option value="NEXUS_VOLUME">NEXUS VOLUME INTERFACE</option>
+                                <option value="SOCKET_STREAM">SOCKET STREAM</option>
+                                <option value="WEATHER">WEATHER</option>
+                                <option value="CLOCK">CLOCK</option>
+                                <option value="CPU_USAGE">CPU USAGE</option>
+                                <option value="NETWORK_TRAFFIC">NETWORK TRAFFIC</option>
+                                <option value="STOCK_TICKER">STOCK TICKER</option>
+                                <option value="NEWS_FEED">NEWS FEED</option>
+                                <option value="RADAR_SWEEP">RADAR SWEEP</option>
+                                <option value="AUDIO_VISUALIZER">AUDIO VISUALIZER</option>
+                                <option value="HEART_RATE">HEART RATE</option>
+                                <option value="BATTERY_STATUS">BATTERY STATUS</option>
+                                <option value="MEMORY_USAGE">MEMORY USAGE</option>
+                                <option value="DISK_SPACE">DISK SPACE</option>
+                                <option value="SERVER_PING">SERVER PING</option>
+                                <option value="DOWNLOAD_SPEED">DOWNLOAD SPEED</option>
+                                <option value="UPLOAD_SPEED">UPLOAD SPEED</option>
+                                <option value="ACTIVE_USERS">ACTIVE USERS</option>
+                                <option value="REVENUE_CHART">REVENUE CHART</option>
+                                <option value="CONVERSION_RATE">CONVERSION RATE</option>
+                                <option value="ERROR_RATE">ERROR RATE</option>
+                                <option value="DATABASE_LOAD">DATABASE LOAD</option>
+                                <option value="CACHE_HIT_RATIO">CACHE HIT RATIO</option>
+                                <option value="API_REQUESTS">API REQUESTS</option>
+                                <option value="LATENCY_GRAPH">LATENCY GRAPH</option>
+                                <option value="UPTIME_COUNTER">UPTIME COUNTER</option>
+                                <option value="SECURITY_ALERTS">SECURITY ALERTS</option>
+                                <option value="THREAT_LEVEL">THREAT LEVEL</option>
+                                <option value="FIREWALL_STATUS">FIREWALL STATUS</option>
+                                <option value="ENCRYPTION_STATUS">ENCRYPTION STATUS</option>
+                                <option value="VPN_CONNECTION">VPN CONNECTION</option>
+                                <option value="SATELLITE_TRACKING">SATELLITE TRACKING</option>
+                                <option value="GPS_COORDINATES">GPS COORDINATES</option>
+                                <option value="COMPASS">COMPASS</option>
+                                <option value="ALTIMETER">ALTIMETER</option>
+                                <option value="SPEEDOMETER">SPEEDOMETER</option>
+                                <option value="TACHOMETER">TACHOMETER</option>
+                                <option value="FUEL_GAUGE">FUEL GAUGE</option>
+                                <option value="ENGINE_TEMP">ENGINE TEMP</option>
+                                <option value="OIL_PRESSURE">OIL PRESSURE</option>
+                                <option value="GEAR_INDICATOR">GEAR INDICATOR</option>
+                                <option value="G_FORCE_METER">G FORCE METER</option>
+                                <option value="GYROSCOPE">GYROSCOPE</option>
+                                <option value="ACCELEROMETER">ACCELEROMETER</option>
+                                <option value="MAGNETIC_FIELD">MAGNETIC FIELD</option>
+                                <option value="LIGHT_SENSOR">LIGHT SENSOR</option>
+                                <option value="PROXIMITY_SENSOR">PROXIMITY SENSOR</option>
+                                <option value="PRESSURE_SENSOR">PRESSURE SENSOR</option>
+                                <option value="HUMIDITY_SENSOR">HUMIDITY SENSOR</option>
+                                <option value="CO2_LEVEL">CO2 LEVEL</option>
+                                <option value="AIR_QUALITY">AIR QUALITY</option>
+                                <option value="RADIATION_LEVEL">RADIATION LEVEL</option>
+                                <option value="SEISMIC_ACTIVITY">SEISMIC ACTIVITY</option>
+                                <option value="SOLAR_FLARE">SOLAR FLARE</option>
+                                <option value="LUNAR_PHASE">LUNAR PHASE</option>
+                                <option value="TIDE_LEVEL">TIDE LEVEL</option>
+                                <option value="WIND_DIRECTION">WIND DIRECTION</option>
+                                <option value="PRECIPITATION_PROB">PRECIPITATION PROB</option>
                             </select>
                         </div>
                         <div>
@@ -527,11 +390,7 @@ export const LiveStreamDeck: React.FC<LiveStreamDeckProps> = ({ widgets, onAddWi
                         
                         {/* Content Area */}
                         <div className="flex-1 relative">
-                            {widget.type === 'VIDEO' && <VideoWidget widget={widget} />}
-                            {widget.type === 'METRIC' && <MetricWidget widget={widget} />}
-                            {widget.type === 'LOG_STREAM' && <LogStreamWidget widget={widget} />}
-                            {widget.type === 'TASK_PROGRESS' && <TaskProgressWidget widget={widget} />}
-                            {widget.type === 'NEXUS_VOLUME' && <NexusVolumeWidget widget={widget} />}
+                            {renderWidget(widget)}
                         </div>
 
                         {/* Resize Handle (Desktop) */}

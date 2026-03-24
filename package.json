@@ -22,15 +22,18 @@
     "motion": "^12.36.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "simplex-noise": "^4.0.3",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "three": "^0.183.2",
     "tsx": "^4.21.0",
+    "uuid": "^13.0.0",
     "zimjs": "^19.1.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^22.14.0",
+    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"

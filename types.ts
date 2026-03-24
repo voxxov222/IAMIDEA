@@ -67,7 +67,7 @@ export enum VisualMode {
 }
 
 // --- NEW WIDGET TYPES ---
-export type WidgetType = 'VIDEO' | 'METRIC' | 'LOG_STREAM' | 'TASK_PROGRESS' | 'NEXUS_VOLUME' | 'SOCKET_STREAM' | 'WEATHER' | 'CLOCK' | 'CPU_USAGE' | 'NETWORK_TRAFFIC' | 'STOCK_TICKER' | 'NEWS_FEED';
+export type WidgetType = 'VIDEO' | 'METRIC' | 'LOG_STREAM' | 'TASK_PROGRESS' | 'NEXUS_VOLUME' | 'SOCKET_STREAM' | 'WEATHER' | 'CLOCK' | 'CPU_USAGE' | 'NETWORK_TRAFFIC' | 'STOCK_TICKER' | 'NEWS_FEED' | 'RADAR_SWEEP' | 'AUDIO_VISUALIZER' | 'HEART_RATE' | 'BATTERY_STATUS' | 'MEMORY_USAGE' | 'DISK_SPACE' | 'SERVER_PING' | 'DOWNLOAD_SPEED' | 'UPLOAD_SPEED' | 'ACTIVE_USERS' | 'REVENUE_CHART' | 'CONVERSION_RATE' | 'ERROR_RATE' | 'DATABASE_LOAD' | 'CACHE_HIT_RATIO' | 'API_REQUESTS' | 'LATENCY_GRAPH' | 'UPTIME_COUNTER' | 'SECURITY_ALERTS' | 'THREAT_LEVEL' | 'FIREWALL_STATUS' | 'ENCRYPTION_STATUS' | 'VPN_CONNECTION' | 'SATELLITE_TRACKING' | 'GPS_COORDINATES' | 'COMPASS' | 'ALTIMETER' | 'SPEEDOMETER' | 'TACHOMETER' | 'FUEL_GAUGE' | 'ENGINE_TEMP' | 'OIL_PRESSURE' | 'GEAR_INDICATOR' | 'G_FORCE_METER' | 'GYROSCOPE' | 'ACCELEROMETER' | 'MAGNETIC_FIELD' | 'LIGHT_SENSOR' | 'PROXIMITY_SENSOR' | 'PRESSURE_SENSOR' | 'HUMIDITY_SENSOR' | 'CO2_LEVEL' | 'AIR_QUALITY' | 'RADIATION_LEVEL' | 'SEISMIC_ACTIVITY' | 'SOLAR_FLARE' | 'LUNAR_PHASE' | 'TIDE_LEVEL' | 'WIND_DIRECTION' | 'PRECIPITATION_PROB';
 
 export interface DashboardWidget {
     id: string;
@@ -96,5 +96,15 @@ export interface EnvironmentSettings {
     bottom?: string;
     left?: string;
     right?: string;
+  };
+  terrain?: {
+    enabled: boolean;
+    seed: number;
+    scale: number;
+    height: number;
+    color: string;
+    wireframe: boolean;
+    animate: boolean;
+    speed: number;
   };
 }

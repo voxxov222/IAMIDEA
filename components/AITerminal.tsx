@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Terminal, X, Maximize2, Minimize2, Play, Package, Plus, Link as LinkIcon, Trash2, Search, Sparkles, Minus, Code2 } from 'lucide-react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { processTerminalCommand, TerminalAction } from '../services/geminiService';
-import { Connection } from '../App';
+import { Connection } from '../types';
 import { NodeData } from './NodeElement';
 
 interface AITerminalProps {
