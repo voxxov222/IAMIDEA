@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import React, { useState, useRef, useEffect } from 'react';
 import { GraphData, ChatMessage } from '../types';
 import { askSystemArchitect } from '../services/geminiService';
@@ -32,7 +33,7 @@ const SecretTerminal: React.FC<SecretTerminalProps> = ({ onClose, graphContext, 
     if (!input.trim() || loading) return;
 
     const userMsg: ChatMessage = { 
-      id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: uuidv4(),
       role: 'user', 
       content: input, 
       timestamp: Date.now() 
@@ -48,7 +49,7 @@ const SecretTerminal: React.FC<SecretTerminalProps> = ({ onClose, graphContext, 
       const response = await askSystemArchitect(userMsg.content, contextSummary);
       
       const sysMsg: ChatMessage = { 
-          id: `sys-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          id: uuidv4(),
           role: 'system', 
           content: response.text, 
           dataPayload: response.dataPayload,
@@ -57,7 +58,7 @@ const SecretTerminal: React.FC<SecretTerminalProps> = ({ onClose, graphContext, 
       setHistory(prev => [...prev, sysMsg]);
     } catch (err) {
       setHistory(prev => [...prev, { 
-        id: `err-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        id: uuidv4(),
         role: 'system', 
         content: 'ERROR: UPLINK FAILED.', 
         timestamp: Date.now() 

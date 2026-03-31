@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { GameNodeContent } from './GameNodeContent';
 import { SearchNodeContent } from './SearchNodeContent';
 import { PollinationsNodeContent } from './PollinationsNodeContent';
 import { Globe, Search, Minimize2, Maximize2, X, ExternalLink, RefreshCw, Code, Play, Pause, Square, RotateCw, Vibrate, Activity, ArrowUpCircle, ArrowDownCircle, Link2, Settings2, Layout, Sparkles, Zap } from 'lucide-react';
@@ -8,7 +9,7 @@ import * as Widgets from './Widgets';
 import * as MoreWidgets from './MoreWidgets';
 import { generateZimCode } from '../services/geminiService';
 
-export type NodeType = 'core' | 'image' | 'video' | 'gif' | 'code' | 'text' | '3d' | 'search' | 'webpage' | 'embed' | 'zim' | 'widget' | 'pollinations';
+export type NodeType = 'core' | 'image' | 'video' | 'gif' | 'code' | 'text' | '3d' | 'search' | 'webpage' | 'embed' | 'zim' | 'widget' | 'pollinations' | 'game';
 
 export type MotionType = 'none' | 'orbit' | 'random' | 'zigzag' | 'pop' | 'bounce' | 'slow_trail' | 'figure_eight' | 'pendulum' | 'spiral' | 'heartbeat' | 'wave' | 'breathe' | 'flicker' | 'glitch' | 'orbit_elliptical' | 'spring' | 'orbit_figure_eight' | 'chase' | 'flee' | 'wander' | 'pulse_wave' | 'spin_cycle' | 'orbit_eccentric' | 'gravity_well' | 'magnetic' | 'repel' | 'orbit_wobble' | 'tornado' | 'float_away' | 'sink' | 'teleport';
 
@@ -29,6 +30,7 @@ export interface NodeData {
   animationState?: 'playing' | 'paused' | 'stopped';
   widgetType?: WidgetType;
   shape?: 'sphere' | 'box' | 'cylinder' | 'torus' | 'cone';
+  color?: string;
   motionType?: MotionType;
   motionTargetId?: string;
   motionSpeed?: number;
@@ -36,6 +38,11 @@ export interface NodeData {
   trail?: { x: number; y: number; z?: number }[];
   opacity?: number;
   velocity?: { x: number; y: number; z?: number };
+  width?: number;
+  height?: number;
+  isLocked?: boolean;
+  loopType?: 'none' | 'pingpong' | 'repeat' | 'oscillate';
+  gamingEffect?: 'none' | 'neon_pulse' | 'glitch_static' | 'particle_trail' | 'hologram_flicker';
 }
 
 interface NodeElementProps {
@@ -54,9 +61,27 @@ interface NodeElementProps {
   onUpdateNode?: (id: string, data: Partial<NodeData>) => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
+  is3D?: boolean;
 }
 
-export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMatch, disableDrag, onSelect, onDragEnd, onConnectStart, onCreateAndLink, onLinkExisting, onDelete, onUpdateNode, onMouseEnter, onMouseLeave }: NodeElementProps) {
+export function NodeElement({ 
+  node, 
+  nodes, 
+  isSelected, 
+  isConnectingTarget, 
+  isMatch, 
+  disableDrag, 
+  onSelect, 
+  onDragEnd, 
+  onConnectStart, 
+  onCreateAndLink, 
+  onLinkExisting, 
+  onDelete, 
+  onUpdateNode, 
+  onMouseEnter, 
+  onMouseLeave,
+  is3D = false
+}: NodeElementProps) {
   const [isMinimized, setIsMinimized] = useState(false);
   const [useProxy, setUseProxy] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -111,6 +136,10 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
     e.stopPropagation();
     if (!onUpdateNode) return;
     
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(5);
+    }
+    
     const delta = (info.delta.x + info.delta.y) * 0.01;
     let scaleChange = 0;
     
@@ -127,6 +156,10 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
     e.stopPropagation();
     if (!onUpdateNode) return;
     
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(5);
+    }
+    
     const delta = info.delta.x;
     const newRotation = (node.rotationZ || 0) + delta;
     onUpdateNode(node.id, { rotationZ: newRotation });
@@ -135,6 +168,10 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
   const handleTiltDrag = (e: any, info: any) => {
     e.stopPropagation();
     if (!onUpdateNode) return;
+    
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(5);
+    }
     
     const deltaX = info.delta.x;
     const deltaY = info.delta.y;
@@ -163,7 +200,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
     switch (node.type) {
       case 'core':
         content = (
-          <div className="w-32 h-32 rounded-full bg-gradient-to-br from-neon-blue to-neon-purple p-1 shadow-[0_0_50px_rgba(0,210,255,0.4)] transition-transform duration-500 hover:scale-110">
+          <div className={`w-32 h-32 rounded-full bg-gradient-to-br from-neon-blue to-neon-purple p-1 shadow-[0_0_50px_rgba(0,210,255,0.4)] transition-transform duration-500 hover:scale-110 ${is3D ? 'pointer-events-none' : ''}`}>
             <div className="w-full h-full rounded-full bg-space-900 flex items-center justify-center overflow-hidden">
               <span className="text-xs font-bold tracking-widest text-neon-blue uppercase text-center px-2">{node.title}</span>
             </div>
@@ -172,7 +209,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
         break;
       case 'image':
         content = (
-          <div className={`p-2 w-48 shadow-lg transition-all hover:border-neon-blue ${isSelected ? 'selected-node' : ''}`}>
+          <div className={`p-2 w-48 shadow-lg transition-all hover:border-neon-blue ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
             {node.url ? (
               <img alt={node.title} className="rounded-lg w-full aspect-video object-cover mb-2 pointer-events-none" src={node.url} referrerPolicy="no-referrer" />
             ) : (
@@ -184,7 +221,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
         break;
       case 'video':
         content = (
-          <div className={`p-2 w-56 shadow-lg transition-all hover:border-neon-purple ${isSelected ? 'selected-node' : ''}`}>
+          <div className={`p-2 w-56 shadow-lg transition-all hover:border-neon-purple ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
             <div className="relative pointer-events-none">
               {node.url ? (
                 <img alt={node.title} className="rounded-lg w-full aspect-video object-cover" src={node.url} referrerPolicy="no-referrer" />
@@ -206,7 +243,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
         break;
       case 'gif':
         content = (
-          <div className={`w-40 h-40 p-1 flex items-center justify-center text-center border-dashed border-neon-pink/50 transition-all ${isSelected ? 'selected-node' : ''} overflow-hidden relative`}>
+          <div className={`w-40 h-40 p-1 flex items-center justify-center text-center border-dashed border-neon-pink/50 transition-all ${isSelected ? 'selected-node' : ''} overflow-hidden relative ${is3D ? 'pointer-events-none' : ''}`}>
             {node.url ? (
               <img alt={node.title} className="w-full h-full object-cover rounded-full pointer-events-none" src={node.url} referrerPolicy="no-referrer" />
             ) : (
@@ -220,7 +257,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
         break;
       case 'code':
         content = (
-          <div className={`w-40 h-auto min-h-[8rem] flex flex-col p-3 border-l-4 border-l-neon-blue transition-all ${isSelected ? 'selected-node' : ''}`}>
+          <div className={`w-40 h-auto min-h-[8rem] flex flex-col p-3 border-l-4 border-l-neon-blue transition-all ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
             <div className="flex gap-1 mb-2 pointer-events-none">
               <div className="w-2 h-2 rounded-full bg-red-500/50"></div>
               <div className="w-2 h-2 rounded-full bg-yellow-500/50"></div>
@@ -234,7 +271,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
         break;
       case '3d':
         content = (
-          <div className={`p-2 w-48 shadow-lg transition-all hover:border-emerald-400 ${isSelected ? 'selected-node' : ''}`}>
+          <div className={`p-2 w-48 shadow-lg transition-all hover:border-emerald-400 ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
             <div className="rounded-lg w-full aspect-square bg-space-800 border border-white/10 mb-2 flex items-center justify-center relative overflow-hidden">
               <div className="absolute inset-0 flex items-center justify-center">
                 <span className="text-emerald-400 font-bold text-xs bg-space-900/80 px-2 py-1 rounded">3D Data Node</span>
@@ -246,7 +283,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
         break;
       case 'search':
         content = (
-          <div className={`p-3 w-64 ${isMinimized ? 'h-auto' : 'h-72'} shadow-lg transition-all hover:border-neon-blue flex flex-col ${isSelected ? 'selected-node' : ''}`}>
+          <div className={`p-3 w-64 ${isMinimized ? 'h-auto' : 'h-72'} shadow-lg transition-all hover:border-neon-blue flex flex-col ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2 pointer-events-none">
                 <Search size={16} className="text-neon-blue" />
@@ -262,14 +299,16 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
               </div>
             </div>
             {!isMinimized && (
-              <SearchNodeContent node={node} nodes={nodes} onCreateAndLink={onCreateAndLink} onLinkExisting={onLinkExisting} />
+              <div className="pointer-events-auto">
+                <SearchNodeContent node={node} nodes={nodes} onCreateAndLink={onCreateAndLink} onLinkExisting={onLinkExisting} />
+              </div>
             )}
           </div>
         );
         break;
       case 'pollinations':
         content = (
-          <div className={`p-3 w-64 ${isMinimized ? 'h-auto' : 'h-80'} shadow-lg transition-all hover:border-neon-blue flex flex-col ${isSelected ? 'selected-node' : ''}`}>
+          <div className={`p-3 w-64 ${isMinimized ? 'h-auto' : 'h-80'} shadow-lg transition-all hover:border-neon-blue flex flex-col ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2 pointer-events-none">
                 <Zap size={16} className="text-neon-blue" />
@@ -285,7 +324,9 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
               </div>
             </div>
             {!isMinimized && (
-              <PollinationsNodeContent node={node} onUpdateNode={onUpdateNode} />
+              <div className="pointer-events-auto">
+                <PollinationsNodeContent node={node} onUpdateNode={onUpdateNode} />
+              </div>
             )}
           </div>
         );
@@ -295,7 +336,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
         const iframeSrc = useProxy && formattedUrl ? `https://corsproxy.io/?${encodeURIComponent(formattedUrl)}` : formattedUrl;
         
         content = (
-          <div className={`p-2 w-80 ${isMinimized ? 'h-auto' : 'h-64'} shadow-lg transition-all hover:border-neon-blue flex flex-col ${isSelected ? 'selected-node' : ''}`}>
+          <div className={`p-2 w-80 ${isMinimized ? 'h-auto' : 'h-64'} shadow-lg transition-all hover:border-neon-blue flex flex-col ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
             <div className="flex items-center justify-between mb-2 px-1">
               <div className="flex items-center gap-2 pointer-events-none">
                 <Globe size={12} className="text-neon-blue" />
@@ -373,7 +414,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
         width: 100% !important; 
         height: 100% !important; 
         border: none !important; 
-      }
+        }
     </style>
   </head>
   <body>
@@ -382,7 +423,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
 </html>`;
 
         content = (
-          <div className={`p-2 w-80 ${isMinimized ? 'h-auto' : 'h-64'} shadow-lg transition-all hover:border-neon-blue flex flex-col ${isSelected ? 'selected-node' : ''}`}>
+          <div className={`p-2 w-80 ${isMinimized ? 'h-auto' : 'h-64'} shadow-lg transition-all hover:border-neon-blue flex flex-col ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
             <div className="flex items-center justify-between mb-2 px-1">
               <div className="flex items-center gap-2 pointer-events-none">
                 <Code size={12} className="text-neon-blue" />
@@ -466,7 +507,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
 </html>`;
 
         content = (
-          <div className={`p-2 w-80 ${isMinimized ? 'h-auto' : 'h-64'} shadow-lg transition-all hover:border-neon-pink flex flex-col ${isSelected ? 'selected-node' : ''}`}>
+          <div className={`p-2 w-80 ${isMinimized ? 'h-auto' : 'h-64'} shadow-lg transition-all hover:border-neon-pink flex flex-col ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
             <div className="flex items-center justify-between mb-2 px-1">
               <div className="flex items-center gap-2 pointer-events-none">
                 <Activity size={12} className="text-neon-pink" />
@@ -532,6 +573,13 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
         );
         break;
       }
+      case 'game':
+        content = (
+          <div className={`p-0 w-80 h-80 shadow-2xl transition-all ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
+            <GameNodeContent node={node} onUpdateNode={onUpdateNode} />
+          </div>
+        );
+        break;
       case 'text':
       case 'widget':
         const widgetData: DashboardWidget = {
@@ -542,7 +590,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
           refreshRate: 1000,
         };
         content = (
-          <div className="w-full h-full bg-space-900/80 border border-white/10 rounded-xl overflow-hidden pointer-events-auto">
+          <div className={`w-full h-full bg-space-900/80 border border-white/10 rounded-xl overflow-hidden ${is3D ? 'pointer-events-none' : 'pointer-events-auto'}`}>
             <div className="bg-white/5 px-3 py-1.5 flex items-center justify-between border-b border-white/10">
               <div className="flex items-center gap-2">
                 <Layout size={12} className="text-neon-blue" />
@@ -553,7 +601,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
                 <span className="text-[8px] text-gray-500 font-mono">ACTIVE</span>
               </div>
             </div>
-            <div className="flex-1 h-[calc(100%-28px)] relative">
+            <div className={`flex-1 h-[calc(100%-28px)] relative ${is3D ? 'pointer-events-auto' : ''}`}>
               {(() => {
                 const type = node.widgetType || 'METRIC';
                 const componentName = type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('') + 'Widget';
@@ -569,7 +617,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
         break;
       default:
         content = (
-          <div className={`p-4 w-48 shadow-lg transition-all hover:border-white/30 ${isSelected ? 'selected-node' : ''}`}>
+          <div className={`p-4 w-48 shadow-lg transition-all hover:border-white/30 ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
             <h3 className="text-sm font-bold text-white mb-2 truncate">{node.title}</h3>
             <p className="text-[10px] text-gray-400 line-clamp-4">{node.content}</p>
           </div>
@@ -627,21 +675,34 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
 
   return (
     <motion.div
-      drag={!disableDrag}
+      drag={!is3D && !disableDrag}
       dragMomentum={false}
       onDragEnd={handleDragEnd}
-      initial={disableDrag ? {} : { x: node.x, y: node.y, z: node.z || 0, scale: node.scale || 1, opacity: node.opacity ?? 1, rotateX: node.rotationX || 0, rotateY: node.rotationY || 0, rotateZ: node.rotationZ || 0 }}
-      animate={disableDrag ? {} : getAnimationProps()}
-      transition={getTransitionProps()}
-      className={`absolute cursor-grab active:cursor-grabbing pointer-events-auto 
-        ${isSelected ? 'ring-4 ring-neon-blue rounded-xl shadow-[0_0_40px_rgba(0,243,255,0.8)]' : ''} 
-        ${isConnectingTarget ? 'ring-4 ring-emerald-400 rounded-xl shadow-[0_0_30px_rgba(52,211,153,0.6)] animate-pulse' : ''}
-        ${isMatch ? 'ring-4 ring-neon-purple rounded-xl shadow-[0_0_30px_rgba(157,80,187,0.6)]' : ''}`}
-      style={{ zIndex: isSelected || isMatch ? 50 : 10, transformStyle: 'preserve-3d' }}
       onPointerDown={(e) => {
+        if (is3D) return; // Let 3D scene handle selection and dragging
         e.stopPropagation();
         onSelect(node.id);
         setShowMenu(true);
+      }}
+      initial={disableDrag ? {} : { x: node.x, y: node.y, z: node.z || 0, scale: node.scale || 1, opacity: node.opacity ?? 1, rotateX: node.rotationX || 0, rotateY: node.rotationY || 0, rotateZ: node.rotationZ || 0 }}
+      animate={disableDrag ? {} : getAnimationProps()}
+      transition={getTransitionProps()}
+      className={`absolute cursor-grab active:cursor-grabbing ${is3D ? 'pointer-events-none' : 'pointer-events-auto'} 
+        ${isSelected ? 'ring-4 ring-neon-blue rounded-xl shadow-[0_0_40px_rgba(0,243,255,0.8)]' : ''} 
+        ${isConnectingTarget ? 'ring-4 ring-emerald-400 rounded-xl shadow-[0_0_30px_rgba(52,211,153,0.6)] animate-pulse' : ''}
+        ${isMatch ? 'ring-4 ring-neon-purple rounded-xl shadow-[0_0_30px_rgba(157,80,187,0.6)]' : ''}`}
+      style={{ 
+        left: is3D ? 0 : node.x, 
+        top: is3D ? 0 : node.y,
+        width: node.width || 200,
+        height: node.height || 'auto',
+        rotateZ: node.rotationZ || 0,
+        rotateY: node.rotationY || 0,
+        rotateX: node.rotationX || 0,
+        opacity: node.opacity ?? 1,
+        scale: node.scale ?? 1,
+        zIndex: isSelected || isMatch ? 50 : 10,
+        transformStyle: 'preserve-3d'
       }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -656,47 +717,47 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
     >
       {renderContent()}
 
-      {isSelected && (
+      {isSelected && !is3D && (
         <>
           {/* Top Left */}
           <motion.div 
             onPan={(e, info) => handleResizeDrag(e, info, 'tl')}
             onPointerDown={(e) => e.stopPropagation()}
-            className="absolute -top-3 -left-3 w-6 h-6 bg-white border-2 border-neon-blue cursor-nwse-resize z-50 rounded-sm hover:bg-neon-blue hover:scale-110 transition-transform"
+            className="absolute -top-4 -left-4 w-8 h-8 bg-white border-2 border-neon-blue cursor-nwse-resize z-50 rounded-sm hover:bg-neon-blue hover:scale-110 transition-transform shadow-[0_0_10px_rgba(255,255,255,0.5)] pointer-events-auto"
           />
           {/* Top Right */}
           <motion.div 
             onPan={(e, info) => handleResizeDrag(e, info, 'tr')}
             onPointerDown={(e) => e.stopPropagation()}
-            className="absolute -top-3 -right-3 w-6 h-6 bg-white border-2 border-neon-blue cursor-nesw-resize z-50 rounded-sm hover:bg-neon-blue hover:scale-110 transition-transform"
+            className="absolute -top-4 -right-4 w-8 h-8 bg-white border-2 border-neon-blue cursor-nesw-resize z-50 rounded-sm hover:bg-neon-blue hover:scale-110 transition-transform shadow-[0_0_10px_rgba(255,255,255,0.5)] pointer-events-auto"
           />
           {/* Bottom Left */}
           <motion.div 
             onPan={(e, info) => handleResizeDrag(e, info, 'bl')}
             onPointerDown={(e) => e.stopPropagation()}
-            className="absolute -bottom-3 -left-3 w-6 h-6 bg-white border-2 border-neon-blue cursor-nesw-resize z-50 rounded-sm hover:bg-neon-blue hover:scale-110 transition-transform"
+            className="absolute -bottom-4 -left-4 w-8 h-8 bg-white border-2 border-neon-blue cursor-nesw-resize z-50 rounded-sm hover:bg-neon-blue hover:scale-110 transition-transform shadow-[0_0_10px_rgba(255,255,255,0.5)] pointer-events-auto"
           />
           {/* Bottom Right */}
           <motion.div 
             onPan={(e, info) => handleResizeDrag(e, info, 'br')}
             onPointerDown={(e) => e.stopPropagation()}
-            className="absolute -bottom-3 -right-3 w-6 h-6 bg-white border-2 border-neon-blue cursor-nwse-resize z-50 rounded-sm hover:bg-neon-blue hover:scale-110 transition-transform"
+            className="absolute -bottom-4 -right-4 w-8 h-8 bg-white border-2 border-neon-blue cursor-nwse-resize z-50 rounded-sm hover:bg-neon-blue hover:scale-110 transition-transform shadow-[0_0_10_rgba(255,255,255,0.5)] pointer-events-auto"
           />
           {/* Rotate Handle */}
           <motion.div 
             onPan={handleRotateDrag}
             onPointerDown={(e) => e.stopPropagation()}
-            className="absolute -top-10 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-neon-purple cursor-ew-resize z-50 hover:bg-neon-purple hover:scale-110 transition-transform flex items-center justify-center"
+            className="absolute -top-12 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-white border-2 border-neon-purple cursor-ew-resize z-50 hover:bg-neon-purple hover:scale-110 transition-transform flex items-center justify-center shadow-[0_0_10px_rgba(255,255,255,0.5)] pointer-events-auto"
           >
-            <RotateCw size={12} className="text-black" />
+            <RotateCw size={14} className="text-black" />
           </motion.div>
           {/* Tilt Handle */}
           <motion.div 
             onPan={handleTiltDrag}
             onPointerDown={(e) => e.stopPropagation()}
-            className="absolute -bottom-10 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-neon-pink cursor-move z-50 hover:bg-neon-pink hover:scale-110 transition-transform flex items-center justify-center"
+            className="absolute -bottom-12 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-white border-2 border-neon-pink cursor-move z-50 hover:bg-neon-pink hover:scale-110 transition-transform flex items-center justify-center shadow-[0_0_10px_rgba(255,255,255,0.5)] pointer-events-auto"
           >
-            <Layout size={12} className="text-black" />
+            <Layout size={14} className="text-black" />
           </motion.div>
         </>
       )}
@@ -746,7 +807,7 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
                 <div className="flex gap-1 justify-center">
                   {(['spin', 'shake', 'wobble', 'pulse', 'float'] as const).map(anim => (
                     <button 
-                      key={anim}
+                      key={`anim-${node.id}-${anim}`}
                       onClick={() => onUpdateNode?.(node.id, { animation: anim, animationState: 'playing' })}
                       className={`px-2 py-1 text-[10px] rounded ${node.animation === anim ? 'bg-neon-purple/30 text-neon-purple' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
                     >
@@ -782,6 +843,19 @@ export function NodeElement({ node, nodes, isSelected, isConnectingTarget, isMat
                   <input type="range" min="-180" max="180" value={node.rotationY || 0} onChange={(e) => onUpdateNode?.(node.id, { rotationY: parseInt(e.target.value) })} className="w-full accent-neon-blue" />
                   <span>Tilt Z</span>
                   <input type="range" min="-180" max="180" value={node.rotationZ || 0} onChange={(e) => onUpdateNode?.(node.id, { rotationZ: parseInt(e.target.value) })} className="w-full accent-neon-purple" />
+                  
+                  <div className="col-span-2 h-px bg-white/10 my-1" />
+                  
+                  <span>Shape</span>
+                  <select value={node.shape || 'sphere'} onChange={(e) => onUpdateNode?.(node.id, { shape: e.target.value as any })} className="bg-black/50 border border-white/10 rounded text-[10px] p-1 text-white">
+                    <option value="sphere">Sphere</option>
+                    <option value="box">Box</option>
+                    <option value="cylinder">Cylinder</option>
+                    <option value="torus">Torus</option>
+                    <option value="cone">Cone</option>
+                  </select>
+                  <span>Color</span>
+                  <input type="color" value={node.color || '#10b981'} onChange={(e) => onUpdateNode?.(node.id, { color: e.target.value })} className="w-full h-4 bg-transparent border-0 cursor-pointer" />
                 </div>
               </div>
             )}

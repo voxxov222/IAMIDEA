@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+import React, { useState, useRef, useEffect } from 'react';
 import { DashboardWidget } from '../types';
 import * as Widgets from './Widgets';
 import * as MoreWidgets from './MoreWidgets';
@@ -229,7 +230,7 @@ export const LiveStreamDeck: React.FC<LiveStreamDeckProps> = ({ widgets, onAddWi
             const centerY = (-view.y + window.innerHeight/2) / view.scale;
             
             onAddWidget({
-                id: `w-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                id: uuidv4(),
                 type: type as any,
                 title: title || 'New Widget',
                 sourceUrl: url,

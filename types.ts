@@ -84,8 +84,9 @@ export interface DashboardWidget {
 export interface EnvironmentSettings {
   backgroundType: 'nebula' | 'stars' | 'grid' | 'solid' | 'custom';
   backgroundColor: string;
+  gridColor?: string;
   customBackgroundUrl?: string;
-  skyboxType: 'none' | 'space' | 'city' | 'abstract' | 'custom';
+  skyboxType: 'none' | 'space' | 'city' | 'abstract' | 'cyberpunk' | 'vaporwave' | 'minimalist' | 'custom';
   skyboxUrl?: string;
   enclosedBox: boolean;
   boxSize: number;

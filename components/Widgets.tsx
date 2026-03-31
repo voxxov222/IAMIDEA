@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import React, { useState, useEffect, useRef } from 'react';
 import { DashboardWidget } from '../types';
 import { animate } from "motion";
@@ -66,7 +67,7 @@ export const CpuUsageWidget = ({ widget }: { widget: DashboardWidget }) => {
   useEffect(() => {
     const interval = setInterval(() => {
       setUsage(prev => {
-        const next = [...prev.slice(1), { id: `cpu-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, val: Math.random() * 100 }];
+        const next = [...prev.slice(1), { id: uuidv4(), val: Math.random() * 100 }];
         return next;
       });
     }, 1000);
@@ -103,7 +104,7 @@ export const NetworkTrafficWidget = ({ widget }: { widget: DashboardWidget }) =>
   useEffect(() => {
     const interval = setInterval(() => {
       setData(prev => [...prev.slice(1), {
-        id: `net-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        id: uuidv4(),
         in: Math.random() * 80,
         out: Math.random() * 40
       }]);
@@ -245,7 +246,7 @@ export const LogStreamWidget = ({ widget }: { widget: DashboardWidget }) => {
         const interval = setInterval(() => {
             const actions = ['FETCH', 'DECRYPT', 'SYNC', 'PING', 'BUFFER', 'OPT'];
             const newLog = `[${new Date().toLocaleTimeString().split(' ')[0]}] ${actions[Math.floor(Math.random()*actions.length)]}::${Math.floor(Math.random()*999)}`;
-            setLogs(prev => [...prev.slice(-8), { id: `log-${Date.now()}-${Math.random()}`, text: newLog }]);
+            setLogs(prev => [...prev.slice(-8), { id: uuidv4(), text: newLog }]);
         }, 800);
         return () => clearInterval(interval);
     }, []);
@@ -386,7 +387,7 @@ export const SocketStreamWidget = ({ widget }: { widget: DashboardWidget }) => {
     // For this demo, we'll simulate a stream
     const interval = setInterval(() => {
       const newMsg = `[${new Date().toLocaleTimeString()}] DATA_PACKET_${Math.floor(Math.random() * 1000)}: ${Math.random().toFixed(4)}`;
-      setMessages(prev => [{ id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, text: newMsg }, ...prev].slice(0, 20));
+      setMessages(prev => [{ id: uuidv4(), text: newMsg }, ...prev].slice(0, 20));
     }, 1000);
     
     return () => clearInterval(interval);

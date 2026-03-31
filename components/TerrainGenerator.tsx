@@ -178,7 +178,7 @@ export const TerrainGenerator = ({
       </mesh>
 
       {scatteredObjects?.map(obj => (
-        <group key={obj.id} position={obj.position} scale={obj.scale}>
+        <group key={`scatter-${obj.id}`} position={obj.position} scale={obj.scale}>
           {obj.type === 'tree' ? (
             <>
               <mesh position={[0, 1.5, 0]}>
@@ -203,7 +203,7 @@ export const TerrainGenerator = ({
         <group>
           {Array.from({ length: 10 }).map((_, i) => (
             <mesh 
-              key={i} 
+              key={`cloud-${i}`} 
               position={[
                 (Math.random() - 0.5) * 200, 
                 20 + Math.random() * 10, 

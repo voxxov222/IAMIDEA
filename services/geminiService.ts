@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Schema, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, Type, Schema, ThinkingLevel, Modality } from "@google/genai";
 import { SearchResult, DeepAnalysisResult, GraphData } from "../types";
 
 const getAI = () => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -329,7 +329,7 @@ export const generateZimCode = async (prompt: string): Promise<string> => {
 };
 
 export interface TerminalAction {
-  type: 'INSTALL_PACKAGE' | 'ADD_NODE' | 'DELETE_NODE' | 'UPDATE_NODE' | 'CONNECT_NODES' | 'SEARCH_WEB' | 'EXECUTE_CODE' | 'CHAT' | 'CLEAR_TERMINAL';
+  type: 'INSTALL_PACKAGE' | 'ADD_NODE' | 'DELETE_NODE' | 'UPDATE_NODE' | 'CONNECT_NODES' | 'SEARCH_WEB' | 'EXECUTE_CODE' | 'CHAT' | 'CLEAR_TERMINAL' | 'GENERATE_ENVIRONMENT';
   payload: any;
 }
 
@@ -350,6 +350,7 @@ export const processTerminalCommand = async (command: string, context: string): 
     - EXECUTE_CODE: { code: string, language: string }
     - CLEAR_TERMINAL: {}
     - CHAT: { message: string } (Normal chatbot response)
+    - GENERATE_ENVIRONMENT: { prompt: string } (Generate 3D world and characters)
     
     ZIMJS INTEGRATION:
     If the user asks for ZIMjs, interactive nodes, or specific ZIM features, use ADD_NODE with type: "zim".
@@ -415,5 +416,115 @@ export const processTerminalCommand = async (command: string, context: string): 
   } catch (error) {
     console.error("Terminal Command Error:", error);
     return { text: "SYSTEM ERROR: UPLINK SEVERED.", actions: [] };
+  }
+};
+
+export const generateEnvironmentAI = async (prompt: string): Promise<{ envSettings?: any; nodes?: any[] }> => {
+  const ai = getAI();
+  const systemInstruction = `
+    You are a 3D World Architect. The user wants to generate a 3D environment and potentially "environmental characters" (specialized 3D nodes).
+    
+    Return a JSON object with:
+    - envSettings: Partial<EnvironmentSettings> (skyboxType, backgroundColor, gridColor, terrain settings)
+    - nodes: Array of NodeData (type: '3d', shape: 'sphere'|'box'|'cylinder'|'torus'|'cone', color: string, title: string, content: string)
+    
+    Skybox Types: 'none', 'space', 'city', 'abstract', 'cyberpunk', 'vaporwave', 'minimalist', 'custom'
+    Shapes: 'sphere', 'box', 'cylinder', 'torus', 'cone'
+    
+    Example:
+    {
+      "envSettings": {
+        "skyboxType": "cyberpunk",
+        "gridColor": "#ff00ff",
+        "terrain": { "enabled": true, "color": "#220033", "animate": true }
+      },
+      "nodes": [
+        { "type": "3d", "shape": "sphere", "color": "#00ffff", "title": "Sentinel", "content": "Environmental Guardian" }
+      ]
+    }
+    
+    Ensure the output is valid JSON only. Do not wrap in markdown code blocks.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Generate environment for: ${prompt}`,
+      config: {
+        systemInstruction: systemInstruction,
+        responseMimeType: "application/json",
+      },
+    });
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    console.error("Environment Generation Error:", error);
+    return {};
+  }
+};
+
+export const generateSpeechAI = async (text: string, voice: string = 'Kore'): Promise<string | undefined> => {
+  const ai = getAI();
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: `Say with expression: ${text}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: voice as any },
+          },
+        },
+      },
+    });
+    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  } catch (error) {
+    console.error("Speech Generation Error:", error);
+    return undefined;
+  }
+};
+
+export const generateMusicAI = async (prompt: string): Promise<{ audioUrl: string; lyrics?: string } | undefined> => {
+  const ai = getAI();
+  try {
+    const response = await ai.models.generateContentStream({
+      model: "lyria-3-clip-preview",
+      contents: prompt,
+    });
+
+    let audioBase64 = "";
+    let lyrics = "";
+    let mimeType = "audio/wav";
+
+    for await (const chunk of response) {
+      const parts = chunk.candidates?.[0]?.content?.parts;
+      if (!parts) continue;
+      for (const part of parts) {
+        if (part.inlineData?.data) {
+          if (!audioBase64 && part.inlineData.mimeType) {
+            mimeType = part.inlineData.mimeType;
+          }
+          audioBase64 += part.inlineData.data;
+        }
+        if (part.text && !lyrics) {
+          lyrics = part.text;
+        }
+      }
+    }
+
+    if (!audioBase64) return undefined;
+
+    const binary = atob(audioBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: mimeType });
+    const audioUrl = URL.createObjectURL(blob);
+
+    return { audioUrl, lyrics };
+  } catch (error) {
+    console.error("Music Generation Error:", error);
+    return undefined;
   }
 };

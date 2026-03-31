@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import React, { useState, useRef, useEffect } from 'react';
 import { Terminal, X, Maximize2, Minimize2, Play, Package, Plus, Link as LinkIcon, Trash2, Search, Sparkles, Minus, Code2 } from 'lucide-react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
@@ -13,6 +14,7 @@ interface AITerminalProps {
   onDeleteNode: (id: string) => void;
   onUpdateNode: (id: string, updates: Partial<NodeData>) => void;
   onConnectNodes: (sourceId: string, targetId: string) => void;
+  onGenerateEnvironment: (prompt: string) => void;
 }
 
 interface TerminalMessage {
@@ -24,7 +26,7 @@ interface TerminalMessage {
 }
 
 export const AITerminal: React.FC<AITerminalProps> = ({ 
-  onClose, nodes, connections, onAddNode, onDeleteNode, onUpdateNode, onConnectNodes 
+  onClose, nodes, connections, onAddNode, onDeleteNode, onUpdateNode, onConnectNodes, onGenerateEnvironment 
 }) => {
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<TerminalMessage[]>([
@@ -59,7 +61,7 @@ export const AITerminal: React.FC<AITerminalProps> = ({
     switch (action.type) {
       case 'ADD_NODE':
         const newNode: NodeData = {
-          id: `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: uuidv4(),
           type: (action.payload.type || 'text') as any,
           title: action.payload.title || 'New Node',
           content: action.payload.content || '',
@@ -108,6 +110,17 @@ export const AITerminal: React.FC<AITerminalProps> = ({
         break;
       case 'CLEAR_TERMINAL':
         setHistory([{ id: `msg-clear-${Date.now()}`, role: 'system', content: 'TERMINAL CLEARED BY ARCHITECT.', timestamp: Date.now() }]);
+        break;
+      case 'GENERATE_ENVIRONMENT':
+        if (action.payload.prompt) {
+          onGenerateEnvironment(action.payload.prompt);
+          setHistory(prev => [...prev, { 
+            id: generateId(),
+            role: 'system', 
+            content: `[ SYSTEM ] INITIATING WORLD ARCHITECT PROTOCOL: ${action.payload.prompt}`, 
+            timestamp: Date.now() 
+          }]);
+        }
         break;
       default:
         console.log('Unhandled action:', action);

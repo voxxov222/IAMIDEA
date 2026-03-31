@@ -1,14 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Image as ImageIcon, Video, Type, Code, Link as LinkIcon, Search, Settings, X, Sparkles, Globe, Activity, Terminal, Layout, Mic, Zap, Grid as GridIcon, Layers, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Plus, Image as ImageIcon, Video, Type, Code, Link as LinkIcon, Search, Settings, X, Sparkles, Globe, Activity, Terminal, Layout, Mic, Zap, Grid as GridIcon, Layers, Trash2, RefreshCw, Music } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 import { generateProceduralWorld } from './lib/worldGenerator';
 import { DraggableWindow } from './components/DraggableWindow';
 import { NodeElement, NodeData, NodeType, MotionType } from './components/NodeElement';
 import { Universe3D } from './components/Universe3D';
+import { CameraControlsOverlay } from './components/CameraControlsOverlay';
 import { io, Socket } from 'socket.io-client';
-import { generateZimCode } from './services/geminiService';
+import { generateZimCode, generateEnvironmentAI } from './services/geminiService';
 import { AITerminal } from './components/AITerminal';
 import { VoiceUplink } from './components/VoiceUplink';
+import { GameSandbox } from './components/GameSandbox';
+import { AudioGenerator } from './components/AudioGenerator';
+import { ObjectPalette } from './components/ObjectPalette';
 import { WidgetType, EnvironmentSettings, Connection } from './types';
 
 const DEFAULT_NODES: NodeData[] = [
@@ -18,6 +23,7 @@ const DEFAULT_NODES: NodeData[] = [
   { id: 'code-1', type: 'code', title: 'Code Snippet', content: "const universe = {\n  nodes: 42,\n  links: 128,\n  status: 'active'\n};", x: 150, y: 600 },
   { id: 'gif-1', type: 'gif', title: 'Dynamic Texture Reference', x: 450, y: 750 },
   { id: 'zim-1', type: 'zim', title: 'ZIM 3D Interactive', content: "const rect = new Rectangle(200, 200, 'orange', 'white', 4).center().drag();\nrect.animate({props:{rotation:360, rotY:360}, time:4, loop:true, ease:'linear'});\nnew Label('Drag me!', 20, 'Arial', 'white').center(rect).mov(0, 120);", x: 850, y: 700 },
+  { id: 'game-1', type: 'game', title: 'IAMGame Engine v0.1', x: 1100, y: 300 },
 ];
 
 const DEFAULT_CONNECTIONS: Connection[] = [
@@ -25,6 +31,7 @@ const DEFAULT_CONNECTIONS: Connection[] = [
   { id: 'conn-2', source: 'core-1', target: 'vid-1' },
   { id: 'conn-3', source: 'core-1', target: 'code-1' },
   { id: 'conn-4', source: 'core-1', target: 'gif-1' },
+  { id: 'conn-5', source: 'core-1', target: 'game-1' },
 ];
 
 export function App() {
@@ -42,6 +49,7 @@ export function App() {
     backgroundType: 'grid',
     skyboxType: 'space',
     backgroundColor: '#050505',
+    gridColor: '#00d2ff',
     enclosedBox: false,
     boxSize: 200,
     boxTextures: {},
@@ -72,6 +80,7 @@ export function App() {
   const [newNodeContent, setNewNodeContent] = useState('');
   const [newNodeUrl, setNewNodeUrl] = useState('');
   const [newNodeShape, setNewNodeShape] = useState<'sphere' | 'box' | 'cylinder' | 'torus' | 'cone'>('sphere');
+  const [newNodeColor, setNewNodeColor] = useState('#10b981');
   const [newNodeWidgetType, setNewNodeWidgetType] = useState<WidgetType>('METRIC');
   const [newNodeMotionType, setNewNodeMotionType] = useState<MotionType>('none');
   const [newNodeMotionTargetId, setNewNodeMotionTargetId] = useState('');
@@ -100,7 +109,10 @@ export function App() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isGeneratingZim, setIsGeneratingZim] = useState(false);
+  const [isGeneratingEnv, setIsGeneratingEnv] = useState(false);
+  const [envPrompt, setEnvPrompt] = useState('');
   const [isVoiceUplinkOpen, setIsVoiceUplinkOpen] = useState(false);
+  const [isAudioGeneratorOpen, setIsAudioGeneratorOpen] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
 
@@ -156,11 +168,14 @@ export function App() {
     if (is3D) return;
 
     let animationFrame: number;
-    const startTime = Date.now();
+    let lastTime = Date.now();
 
     const loop = () => {
-      const time = (Date.now() - startTime) / 1000;
-      
+      const now = Date.now();
+      const delta = (now - lastTime) / 16.666; // Normalize to 60fps
+      lastTime = now;
+      const t = now * 0.001;
+
       setNodes(prevNodes => {
         const hasMotion = prevNodes.some(n => n.motionType && n.motionType !== 'none');
         if (!hasMotion) return prevNodes;
@@ -170,7 +185,7 @@ export function App() {
           
           const speed = node.motionSpeed || 1;
           const direction = node.motionDirection || 1;
-          const t = time * speed * direction;
+          const mt = t * speed * direction;
 
           switch (node.motionType) {
             case 'orbit':
@@ -180,8 +195,8 @@ export function App() {
                   const radius = 300; 
                   return {
                     ...node,
-                    x: target.x + Math.cos(t) * radius,
-                    y: target.y + Math.sin(t) * radius
+                    x: target.x + Math.cos(mt) * radius,
+                    y: target.y + Math.sin(mt) * radius
                   };
                 }
               }
@@ -189,17 +204,17 @@ export function App() {
             case 'random':
               return {
                 ...node,
-                x: node.x + (Math.random() - 0.5) * 10 * speed,
-                y: node.y + (Math.random() - 0.5) * 10 * speed
+                x: node.x + (Math.random() - 0.5) * 10 * speed * delta,
+                y: node.y + (Math.random() - 0.5) * 10 * speed * delta
               };
             case 'zigzag':
               return {
                 ...node,
-                x: node.x + Math.sin(t) * 5,
-                y: node.y + Math.cos(t * 0.5) * 2
+                x: node.x + Math.sin(mt) * 5 * delta,
+                y: node.y + Math.cos(mt * 0.5) * 2 * delta
               };
             case 'pop':
-              const popVal = (Math.sin(t * 2) + 1) / 2;
+              const popVal = (Math.sin(mt * 2) + 1) / 2;
               return {
                 ...node,
                 opacity: popVal,
@@ -217,12 +232,12 @@ export function App() {
               const dist = Math.sqrt(dx * dx + dy * dy);
               
               if (dist > 400) {
-                vx -= dx * 0.0001;
-                vy -= dy * 0.0001;
+                vx -= dx * 0.0001 * delta;
+                vy -= dy * 0.0001 * delta;
               }
 
-              let nx = node.x + vx;
-              let ny = node.y + vy;
+              let nx = node.x + vx * delta;
+              let ny = node.y + vy * delta;
               
               if (nx < 0 || nx > window.innerWidth) vx *= -1;
               if (ny < 0 || ny > window.innerHeight) vy *= -1;
@@ -234,8 +249,8 @@ export function App() {
                 velocity: { x: vx, y: vy }
               };
             case 'slow_trail':
-              const stX = node.x + Math.cos(t * 0.2) * 2 * speed;
-              const stY = node.y + Math.sin(t * 0.2) * 2 * speed;
+              const stX = node.x + Math.cos(mt * 0.2) * 2 * speed * delta;
+              const stY = node.y + Math.sin(mt * 0.2) * 2 * speed * delta;
               const newTrail = [...(node.trail || []), { x: node.x, y: node.y }].slice(-20);
               return {
                 ...node,
@@ -246,24 +261,24 @@ export function App() {
             case 'figure_eight':
               return {
                 ...node,
-                x: node.x + Math.sin(t) * 10 * speed,
-                y: node.y + Math.sin(t * 2) * 5 * speed
+                x: node.x + Math.sin(mt) * 10 * speed * delta,
+                y: node.y + Math.sin(mt * 2) * 5 * speed * delta
               };
             case 'pendulum':
               return {
                 ...node,
-                x: node.x + Math.sin(t) * 15 * speed,
-                y: node.y + Math.abs(Math.cos(t)) * 5 * speed
+                x: node.x + Math.sin(mt) * 15 * speed * delta,
+                y: node.y + Math.abs(Math.cos(mt)) * 5 * speed * delta
               };
             case 'spiral':
-              const spiralRadius = (t % 10) * 20;
+              const spiralRadius = (mt % 10) * 20;
               return {
                 ...node,
-                x: node.x + Math.cos(t * 5) * spiralRadius * 0.1 * speed,
-                y: node.y + Math.sin(t * 5) * spiralRadius * 0.1 * speed
+                x: node.x + Math.cos(mt * 5) * spiralRadius * 0.1 * speed * delta,
+                y: node.y + Math.sin(mt * 5) * spiralRadius * 0.1 * speed * delta
               };
             case 'heartbeat':
-              const beat = Math.pow(Math.sin(t * 3), 10);
+              const beat = Math.pow(Math.sin(mt * 3), 10);
               return {
                 ...node,
                 scale: 1 + beat * 0.5
@@ -271,13 +286,13 @@ export function App() {
             case 'wave':
               return {
                 ...node,
-                x: node.x + 2 * speed,
-                y: node.y + Math.sin(t * 5) * 10 * speed
+                x: node.x + 2 * speed * delta,
+                y: node.y + Math.sin(mt * 5) * 10 * speed * delta
               };
             case 'breathe':
               return {
                 ...node,
-                scale: 1 + Math.sin(t * 2) * 0.2
+                scale: 1 + Math.sin(mt * 2) * 0.2
               };
             case 'flicker':
               return {
@@ -299,8 +314,8 @@ export function App() {
                 if (target) {
                   return {
                     ...node,
-                    x: target.x + Math.cos(t) * 400,
-                    y: target.y + Math.sin(t) * 150
+                    x: target.x + Math.cos(mt) * 400,
+                    y: target.y + Math.sin(mt) * 150
                   };
                 }
               }
@@ -308,7 +323,7 @@ export function App() {
             case 'spring':
               return {
                 ...node,
-                y: node.y + Math.sin(t * 10) * Math.exp(-(t % 2)) * 20 * speed
+                y: node.y + Math.sin(mt * 10) * Math.exp(-(mt % 2)) * 20 * speed * delta
               };
             case 'orbit_figure_eight':
               if (node.motionTargetId) {
@@ -316,8 +331,8 @@ export function App() {
                 if (target) {
                   return {
                     ...node,
-                    x: target.x + Math.sin(t) * 300,
-                    y: target.y + Math.sin(t * 2) * 150
+                    x: target.x + Math.sin(mt) * 300,
+                    y: target.y + Math.sin(mt * 2) * 150
                   };
                 }
               }
@@ -330,8 +345,8 @@ export function App() {
                   const dy = target.y - node.y;
                   return {
                     ...node,
-                    x: node.x + dx * 0.05 * speed,
-                    y: node.y + dy * 0.05 * speed
+                    x: node.x + dx * 0.05 * speed * delta,
+                    y: node.y + dy * 0.05 * speed * delta
                   };
                 }
               }
@@ -346,8 +361,8 @@ export function App() {
                   if (dist < 500) {
                     return {
                       ...node,
-                      x: node.x + (dx / dist) * 5 * speed,
-                      y: node.y + (dy / dist) * 5 * speed
+                      x: node.x + (dx / dist) * 5 * speed * delta,
+                      y: node.y + (dy / dist) * 5 * speed * delta
                     };
                   }
                 }
@@ -356,30 +371,30 @@ export function App() {
             case 'wander':
               return {
                 ...node,
-                x: node.x + Math.sin(t * 0.5) * 5 * speed + Math.cos(t * 1.2) * 2 * speed,
-                y: node.y + Math.cos(t * 0.7) * 5 * speed + Math.sin(t * 1.5) * 2 * speed
+                x: node.x + Math.sin(mt * 0.5) * 5 * speed * delta + Math.cos(mt * 1.2) * 2 * speed * delta,
+                y: node.y + Math.cos(mt * 0.7) * 5 * speed * delta + Math.sin(mt * 1.5) * 2 * speed * delta
               };
             case 'pulse_wave':
               return {
                 ...node,
-                scale: 1 + Math.sin(node.x * 0.01 + t * 5) * 0.3
+                scale: 1 + Math.sin(node.x * 0.01 + mt * 5) * 0.3
               };
             case 'spin_cycle':
               return {
                 ...node,
-                x: node.x + Math.cos(t * 5) * 5 * speed,
-                y: node.y + Math.sin(t * 5) * 5 * speed,
-                rotationZ: (node.rotationZ || 0) + 5 * speed
+                x: node.x + Math.cos(mt * 5) * 5 * speed * delta,
+                y: node.y + Math.sin(mt * 5) * 5 * speed * delta,
+                rotationZ: (node.rotationZ || 0) + 5 * speed * delta
               };
             case 'orbit_eccentric':
               if (node.motionTargetId) {
                 const target = prevNodes.find(n => n.id === node.motionTargetId);
                 if (target) {
-                  const r = 200 + Math.sin(t * 3) * 100;
+                  const r = 200 + Math.sin(mt * 3) * 100;
                   return {
                     ...node,
-                    x: target.x + Math.cos(t) * r,
-                    y: target.y + Math.sin(t) * r
+                    x: target.x + Math.cos(mt) * r,
+                    y: target.y + Math.sin(mt) * r
                   };
                 }
               }
@@ -393,16 +408,16 @@ export function App() {
               let gvx = node.velocity?.x || 0;
               let gvy = node.velocity?.y || 0;
               if (gDist > 50) {
-                gvx += (gdx / gDist) * 0.5 * speed;
-                gvy += (gdy / gDist) * 0.5 * speed;
+                gvx += (gdx / gDist) * 0.5 * speed * delta;
+                gvy += (gdy / gDist) * 0.5 * speed * delta;
               } else {
                 gvx = (Math.random() - 0.5) * 50 * speed;
                 gvy = (Math.random() - 0.5) * 50 * speed;
               }
               return {
                 ...node,
-                x: node.x + gvx,
-                y: node.y + gvy,
+                x: node.x + gvx * delta,
+                y: node.y + gvy * delta,
                 velocity: { x: gvx, y: gvy }
               };
             }
@@ -415,8 +430,8 @@ export function App() {
                   const dy = other.y - node.y;
                   const dist = Math.sqrt(dx * dx + dy * dy);
                   if (dist > 0 && dist < 300) {
-                    mx += (dx / dist) * 0.5 * speed;
-                    my += (dy / dist) * 0.5 * speed;
+                    mx += (dx / dist) * 0.5 * speed * delta;
+                    my += (dy / dist) * 0.5 * speed * delta;
                   }
                 }
               });
@@ -431,8 +446,8 @@ export function App() {
                   const dy = node.y - other.y;
                   const dist = Math.sqrt(dx * dx + dy * dy);
                   if (dist > 0 && dist < 200) {
-                    rx += (dx / dist) * 2 * speed;
-                    ry += (dy / dist) * 2 * speed;
+                    rx += (dx / dist) * 2 * speed * delta;
+                    ry += (dy / dist) * 2 * speed * delta;
                   }
                 }
               });
@@ -445,30 +460,30 @@ export function App() {
                   const radius = 300;
                   return {
                     ...node,
-                    x: target.x + Math.cos(t) * radius + Math.sin(t * 10) * 20,
-                    y: target.y + Math.sin(t) * radius + Math.cos(t * 10) * 20
+                    x: target.x + Math.cos(mt) * radius + Math.sin(mt * 10) * 20,
+                    y: target.y + Math.sin(mt) * radius + Math.cos(mt * 10) * 20
                   };
                 }
               }
               break;
             case 'tornado':
-              const torRadius = (t % 5) * 50;
+              const torRadius = (mt % 5) * 50;
               return {
                 ...node,
-                x: node.x + Math.cos(t * 10) * torRadius * 0.1 * speed,
-                y: node.y - 2 * speed + Math.sin(t * 10) * torRadius * 0.1 * speed
+                x: node.x + Math.cos(mt * 10) * torRadius * 0.1 * speed * delta,
+                y: node.y - 2 * speed * delta + Math.sin(mt * 10) * torRadius * 0.1 * speed * delta
               };
             case 'float_away':
               return {
                 ...node,
-                y: node.y - 1 * speed,
-                x: node.x + Math.sin(t) * 2 * speed
+                y: node.y - 1 * speed * delta,
+                x: node.x + Math.sin(mt) * 2 * speed * delta
               };
             case 'sink':
               return {
                 ...node,
-                y: node.y + 1 * speed,
-                x: node.x + Math.sin(t) * 2 * speed
+                y: node.y + 1 * speed * delta,
+                x: node.x + Math.sin(mt) * 2 * speed * delta
               };
             case 'teleport':
               if (Math.random() > 0.98) {
@@ -542,8 +557,11 @@ export function App() {
     if (connectingFrom) {
       if (connectingFrom !== id) {
         // Create connection
-        const newConn = { id: `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, source: connectingFrom, target: id };
-        setConnections([...connections, newConn]);
+        const newConn = { id: uuidv4(), source: connectingFrom, target: id };
+        setConnections(prev => {
+          if (prev.some(c => c.id === newConn.id)) return prev;
+          return [...prev, newConn];
+        });
         socketRef.current?.emit('create-connection', newConn);
       }
       setConnectingFrom(null);
@@ -566,7 +584,7 @@ export function App() {
     if (!sourceNode) return;
 
     const newNode: NodeData = {
-      id: `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: uuidv4(),
       type: newNodeData.type || 'text',
       title: newNodeData.title || 'New Node',
       content: newNodeData.content,
@@ -578,7 +596,7 @@ export function App() {
     };
 
     const newConn = {
-      id: `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: uuidv4(),
       source: sourceId,
       target: newNode.id
     };
@@ -602,24 +620,73 @@ export function App() {
     );
     if (!exists) {
       const newConn = {
-        id: `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: uuidv4(),
         source: sourceId,
         target: targetId
       };
-      setConnections(prev => [...prev, newConn]);
+      setConnections(prev => {
+        if (prev.some(c => c.id === newConn.id)) return prev;
+        return [...prev, newConn];
+      });
       socketRef.current?.emit('create-connection', newConn);
+    }
+  };
+
+  const handleAddObject = (type: NodeType, shape?: string) => {
+    const newNode: NodeData = {
+      id: uuidv4(),
+      type,
+      title: shape ? `New ${shape.charAt(0).toUpperCase() + shape.slice(1)}` : `New ${type.charAt(0).toUpperCase() + type.slice(1)}`,
+      x: window.innerWidth / 2 + (Math.random() - 0.5) * 200,
+      y: window.innerHeight / 2 + (Math.random() - 0.5) * 200,
+      z: (Math.random() - 0.5) * 100,
+      shape: shape as any,
+      color: type === '3d' ? '#10b981' : undefined,
+      scale: 1,
+      animationState: 'playing',
+      animation: 'none'
+    };
+    setNodes(prev => [...prev, newNode]);
+    setSelectedNode(newNode.id);
+  };
+
+  const handleGenerateEnvironment = async (prompt?: string) => {
+    const finalPrompt = prompt || envPrompt;
+    if (!finalPrompt.trim() || isGeneratingEnv) return;
+    setIsGeneratingEnv(true);
+    try {
+      const result = await generateEnvironmentAI(finalPrompt);
+      if (result.envSettings) {
+        setEnvSettings(prev => ({ ...prev, ...result.envSettings }));
+      }
+      if (result.nodes && Array.isArray(result.nodes)) {
+        const newNodes = result.nodes.map(n => ({
+          ...n,
+          id: uuidv4(),
+          x: Math.random() * 1000 - 500,
+          y: Math.random() * 1000 - 500,
+          z: Math.random() * 1000 - 500,
+        }));
+        setNodes(prev => [...prev, ...newNodes]);
+      }
+      if (!prompt) setEnvPrompt('');
+    } catch (error) {
+      console.error("AI Environment Generation failed:", error);
+    } finally {
+      setIsGeneratingEnv(false);
     }
   };
 
   const handleAddNode = () => {
     if (!newNodeTitle) return;
     const newNode: NodeData = {
-      id: `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: uuidv4(),
       type: newNodeType,
       title: newNodeTitle,
       content: newNodeContent,
       url: newNodeUrl,
       shape: newNodeShape,
+      color: newNodeColor,
       widgetType: newNodeType === 'widget' ? newNodeWidgetType : undefined,
       x: window.innerWidth / 2 - pan.x,
       y: window.innerHeight / 2 - pan.y,
@@ -786,7 +853,7 @@ export function App() {
     switch (action.type) {
       case 'addNode':
         const newNode: NodeData = {
-          id: `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: uuidv4(),
           type: action.payload.type || 'text',
           title: action.payload.title,
           content: action.payload.content,
@@ -802,7 +869,7 @@ export function App() {
         const target = nodes.find(n => n.title.toLowerCase().includes(action.payload.targetId.toLowerCase()));
         if (source && target) {
           const newConn = {
-            id: `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: uuidv4(),
             source: source.id,
             target: target.id
           };
@@ -841,21 +908,24 @@ export function App() {
         {!is3D && <div aria-hidden="true" className="absolute inset-0 grid-overlay pointer-events-none" style={{ transform: `translate(${pan.x % 50}px, ${pan.y % 50}px)` }}></div>}
         
         {is3D ? (
-          <Universe3D
-            nodes={nodes}
-            connections={connections}
-            selectedNode={selectedNode}
-            connectingFrom={connectingFrom}
-            searchQuery={searchQuery}
-            envSettings={envSettings}
-            onSelect={handleNodeSelect}
-            onDragEnd={handleNodeDragEnd}
-            onConnectStart={handleConnectStart}
-            onCreateAndLink={handleCreateAndLink}
-            onLinkExisting={handleLinkExisting}
-            onDelete={handleDeleteNode}
-            onUpdateNode={handleUpdateNode}
-          />
+          <>
+            <Universe3D
+              nodes={nodes}
+              connections={connections}
+              selectedNode={selectedNode}
+              connectingFrom={connectingFrom}
+              searchQuery={searchQuery}
+              envSettings={envSettings}
+              onSelect={handleNodeSelect}
+              onDragEnd={handleNodeDragEnd}
+              onConnectStart={handleConnectStart}
+              onCreateAndLink={handleCreateAndLink}
+              onLinkExisting={handleLinkExisting}
+              onDelete={handleDeleteNode}
+              onUpdateNode={handleUpdateNode}
+            />
+            <CameraControlsOverlay />
+          </>
         ) : (
           <div 
             className="world-container absolute inset-0 w-full h-full" 
@@ -969,6 +1039,13 @@ export function App() {
         </div>
         <div className="flex gap-4 pointer-events-auto">
           <button 
+            onClick={() => toggleWindow('gameSandbox')}
+            className="glass-morphism px-4 py-2 rounded-full text-xs font-bold hover:bg-neon-pink/20 transition-colors border border-neon-pink/50 text-neon-pink hover:shadow-[0_0_15px_rgba(255,0,255,0.4)] flex items-center gap-2"
+          >
+            <Zap size={12} />
+            GAME ENGINE
+          </button>
+          <button 
             onClick={handleResetUniverse}
             className="glass-morphism px-4 py-2 rounded-full text-xs font-bold hover:bg-white/10 transition-colors border border-neon-purple/50 text-neon-purple hover:shadow-[0_0_15px_rgba(157,80,187,0.4)]"
           >
@@ -1029,7 +1106,7 @@ export function App() {
                     const result = await expandNodeDeep(node.title, node.content || '');
                     
                     const newNodes = (result.newConcepts || []).filter(c => c && c.name).map((concept, index) => ({
-                      id: `node-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`,
+                      id: uuidv4(),
                       type: 'text' as const,
                       title: concept.name,
                       content: concept.description,
@@ -1038,7 +1115,7 @@ export function App() {
                     }));
 
                     const newConnections = newNodes.map(n => ({
-                      id: `conn-${Date.now()}-${n.id}-${Math.random().toString(36).substr(2, 5)}`,
+                      id: uuidv4(),
                       source: node.id,
                       target: n.id
                     }));
@@ -1081,6 +1158,11 @@ export function App() {
         isOpen={isVoiceUplinkOpen} 
         onClose={() => setIsVoiceUplinkOpen(false)} 
         onAction={handleVoiceAction}
+      />
+
+      <AudioGenerator 
+        isOpen={isAudioGeneratorOpen}
+        onClose={() => setIsAudioGeneratorOpen(false)}
       />
 
       {/* Floating Action Menu - Moved to Top Right for better visibility */}
@@ -1131,9 +1213,17 @@ export function App() {
                 <Globe size={20} />
                 <span className="absolute right-14 bg-space-900 px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap uppercase tracking-widest">World Generator</span>
               </button>
+              <button onClick={() => toggleWindow('gameSandbox')} className="glass-morphism w-12 h-12 rounded-full flex items-center justify-center hover:bg-neon-pink/20 hover:text-neon-pink transition-colors group relative">
+                <Zap size={20} />
+                <span className="absolute right-14 bg-space-900 px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap uppercase tracking-widest">Game Sandbox</span>
+              </button>
               <button onClick={() => setIsVoiceUplinkOpen(!isVoiceUplinkOpen)} className={`glass-morphism w-12 h-12 rounded-full flex items-center justify-center transition-colors group relative ${isVoiceUplinkOpen ? 'bg-neon-blue/20 text-neon-blue' : 'hover:bg-neon-blue/20 hover:text-neon-blue'}`}>
                 <Mic size={20} />
                 <span className="absolute right-14 bg-space-900 px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap uppercase tracking-widest">Voice Uplink</span>
+              </button>
+              <button onClick={() => setIsAudioGeneratorOpen(!isAudioGeneratorOpen)} className={`glass-morphism w-12 h-12 rounded-full flex items-center justify-center transition-colors group relative ${isAudioGeneratorOpen ? 'bg-neon-pink/20 text-neon-pink' : 'hover:bg-neon-pink/20 hover:text-neon-pink'}`}>
+                <Music size={20} />
+                <span className="absolute right-14 bg-space-900 px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap uppercase tracking-widest">Audio Generator</span>
               </button>
             </motion.div>
           )}
@@ -1171,9 +1261,9 @@ export function App() {
           <DraggableWindow title="Add Node" onClose={() => toggleWindow('addNode')} defaultPosition={{ x: Math.max(20, window.innerWidth / 2 - 160), y: 150 }}>
             <div className="space-y-4 w-64">
               <div className="flex gap-2 flex-wrap">
-                {(['text', 'image', 'video', 'code', 'gif', '3d', 'search', 'webpage', 'embed', 'zim', 'widget', 'pollinations'] as NodeType[]).map(type => (
+                {(['text', 'image', 'video', 'code', 'gif', '3d', 'search', 'webpage', 'embed', 'zim', 'widget', 'pollinations', 'game'] as NodeType[]).map(type => (
                   <button 
-                    key={type}
+                    key={`type-${type}`}
                     onClick={() => setNewNodeType(type)}
                     className={`p-2 rounded-lg flex-1 min-w-[30px] flex justify-center items-center transition-colors ${newNodeType === type ? 'bg-neon-blue/20 text-neon-blue border border-neon-blue/50' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}
                   >
@@ -1189,6 +1279,7 @@ export function App() {
                     {type === 'zim' && <Activity size={16} />}
                     {type === 'widget' && <Layout size={16} />}
                     {type === 'pollinations' && <Zap size={16} />}
+                    {type === 'game' && <Zap size={16} />}
                   </button>
                 ))}
               </div>
@@ -1264,6 +1355,34 @@ export function App() {
                     <option value="WIND_DIRECTION">Wind Direction</option>
                     <option value="PRECIPITATION_PROB">Precipitation Prob</option>
                   </select>
+                </div>
+              )}
+              
+              {newNodeType === '3d' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <label className="text-[10px] text-gray-400 uppercase tracking-wider">Shape</label>
+                    <select 
+                      value={newNodeShape}
+                      onChange={(e) => setNewNodeShape(e.target.value as any)}
+                      className="w-full bg-space-800 border border-white/10 rounded p-2 text-sm text-white focus:outline-none focus:border-neon-blue"
+                    >
+                      <option value="sphere">Sphere</option>
+                      <option value="box">Box</option>
+                      <option value="cylinder">Cylinder</option>
+                      <option value="torus">Torus</option>
+                      <option value="cone">Cone</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] text-gray-400 uppercase tracking-wider">Color</label>
+                    <input 
+                      type="color"
+                      value={newNodeColor}
+                      onChange={(e) => setNewNodeColor(e.target.value)}
+                      className="w-full h-9 bg-space-800 border border-white/10 rounded cursor-pointer"
+                    />
+                  </div>
                 </div>
               )}
               
@@ -1441,7 +1560,7 @@ export function App() {
                   >
                     <option value="">Select Node...</option>
                     {nodes.map(n => (
-                      <option key={n.id} value={n.id}>{n.title}</option>
+                      <option key={`opt-${n.id}`} value={n.id}>{n.title}</option>
                     ))}
                   </select>
                 </div>
@@ -1632,7 +1751,7 @@ export function App() {
                     >
                       <option value="">Select Node...</option>
                       {nodes.filter(n => n.id !== selectedNode).map(n => (
-                        <option key={n.id} value={n.id}>{n.title}</option>
+                        <option key={`edit-opt-${n.id}`} value={n.id}>{n.title}</option>
                       ))}
                     </select>
                   </div>
@@ -1840,7 +1959,7 @@ export function App() {
             <div className="w-64 space-y-2">
               <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Saved Nodes</p>
               {nodes.slice(0, 3).map(node => (
-                <div key={`bm-${node.id}`} className="flex items-center justify-between p-2 bg-white/5 hover:bg-white/10 rounded cursor-pointer transition-colors" onClick={() => {
+                <div key={`bookmark-${node.id}`} className="flex items-center justify-between p-2 bg-white/5 hover:bg-white/10 rounded cursor-pointer transition-colors" onClick={() => {
                   setPan({ x: window.innerWidth / 2 - node.x, y: window.innerHeight / 2 - node.y });
                   setSelectedNode(node.id);
                 }}>
@@ -1861,6 +1980,38 @@ export function App() {
         {activeWindows.includes('settings') && (
           <DraggableWindow title="Environment Settings" onClose={() => toggleWindow('settings')} defaultPosition={{ x: 100, y: 200 }}>
             <div className="w-72 space-y-6 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+              {/* AI Generation Section */}
+              <div className="space-y-3 bg-neon-blue/5 p-3 rounded-lg border border-neon-blue/20">
+                <p className="text-[10px] text-neon-blue uppercase tracking-wider font-bold flex items-center gap-2">
+                  <Sparkles size={12} /> AI World Architect
+                </p>
+                <div className="relative">
+                  <textarea 
+                    value={envPrompt}
+                    onChange={(e) => setEnvPrompt(e.target.value)}
+                    placeholder="Describe your world (e.g. 'A neon cyberpunk city with floating sentinels')..."
+                    className="w-full bg-space-900 border border-white/10 rounded p-2 text-xs text-white focus:outline-none focus:border-neon-blue min-h-[60px] resize-none"
+                  />
+                  <button 
+                    onClick={() => handleGenerateEnvironment()}
+                    disabled={isGeneratingEnv || !envPrompt.trim()}
+                    className={`absolute bottom-2 right-2 p-1.5 rounded transition-all ${isGeneratingEnv ? 'bg-gray-600 cursor-not-allowed' : 'bg-neon-blue hover:bg-neon-blue/80 text-white shadow-[0_0_10px_rgba(0,210,255,0.5)]'}`}
+                  >
+                    {isGeneratingEnv ? (
+                      <RefreshCw size={14} className="animate-spin" />
+                    ) : (
+                      <Zap size={14} />
+                    )}
+                  </button>
+                </div>
+                <p className="text-[9px] text-gray-500 italic">Generates environment settings and 3D characters.</p>
+              </div>
+
+              {/* Object Library Section */}
+              <div className="pt-4 border-t border-white/10">
+                <ObjectPalette onAddObject={handleAddObject} />
+              </div>
+
               <div className="space-y-2">
                 <p className="text-[10px] text-gray-500 uppercase tracking-wider">2D Background Theme</p>
                 <div className="grid grid-cols-3 gap-2">
@@ -1896,6 +2047,9 @@ export function App() {
                         <option value="space">Deep Space</option>
                         <option value="city">Cyber City</option>
                         <option value="abstract">Abstract Sunset</option>
+                        <option value="cyberpunk">Cyberpunk Night</option>
+                        <option value="vaporwave">Vaporwave</option>
+                        <option value="minimalist">Minimalist</option>
                       </select>
                     </div>
 
@@ -1920,6 +2074,18 @@ export function App() {
                         className="w-full h-8 bg-space-800 border border-white/10 rounded cursor-pointer"
                       />
                     </div>
+
+                    {envSettings.backgroundType === 'grid' && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] text-gray-400 uppercase tracking-wider">Grid Color</label>
+                        <input 
+                          type="color"
+                          value={envSettings.gridColor || '#00d2ff'}
+                          onChange={(e) => setEnvSettings({...envSettings, gridColor: e.target.value})}
+                          className="w-full h-8 bg-space-800 border border-white/10 rounded cursor-pointer"
+                        />
+                      </div>
+                    )}
 
                     <div className="space-y-4 border-t border-white/5 pt-4">
                       <div className="flex items-center justify-between">
@@ -1988,6 +2154,19 @@ export function App() {
                             />
                           </div>
 
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-gray-400 uppercase tracking-wider">Terrain Color</label>
+                            <input 
+                              type="color"
+                              value={envSettings.terrain.color}
+                              onChange={(e) => setEnvSettings({
+                                ...envSettings,
+                                terrain: { ...envSettings.terrain!, color: e.target.value }
+                              })}
+                              className="w-full h-6 bg-space-800 border border-white/10 rounded cursor-pointer"
+                            />
+                          </div>
+
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] text-gray-400 uppercase tracking-wider">Wireframe</span>
                             <div 
@@ -2013,6 +2192,26 @@ export function App() {
                               <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${envSettings.terrain.animate ? 'right-1' : 'left-1'}`}></div>
                             </div>
                           </div>
+
+                          {envSettings.terrain.animate && (
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-gray-400 uppercase tracking-wider flex justify-between">
+                                Animation Speed <span>{envSettings.terrain.speed}</span>
+                              </label>
+                              <input 
+                                type="range"
+                                min="0.1"
+                                max="2"
+                                step="0.1"
+                                value={envSettings.terrain.speed}
+                                onChange={(e) => setEnvSettings({
+                                  ...envSettings,
+                                  terrain: { ...envSettings.terrain!, speed: parseFloat(e.target.value) }
+                                })}
+                                className="w-full accent-neon-blue"
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2044,90 +2243,6 @@ export function App() {
                       )}
                     </div>
 
-                    <div className="space-y-2 border-t border-white/5 pt-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-300">Terrain Generator</span>
-                        <div 
-                          onClick={() => setEnvSettings({...envSettings, terrain: {...(envSettings.terrain || { enabled: false, seed: 42, scale: 20, height: 5, color: '#00d2ff', wireframe: true, animate: false, speed: 0.5 }), enabled: !envSettings.terrain?.enabled}})}
-                          className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${envSettings.terrain?.enabled ? 'bg-neon-blue' : 'bg-gray-600'}`}
-                        >
-                          <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${envSettings.terrain?.enabled ? 'right-1' : 'left-1'}`}></div>
-                        </div>
-                      </div>
-                      {envSettings.terrain?.enabled && (
-                        <div className="space-y-3 mt-2 p-2 bg-white/5 rounded border border-white/10">
-                          <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 uppercase tracking-wider flex justify-between">
-                              Terrain Height <span>{envSettings.terrain.height}</span>
-                            </label>
-                            <input 
-                              type="range"
-                              min="1"
-                              max="50"
-                              value={envSettings.terrain.height}
-                              onChange={(e) => setEnvSettings({...envSettings, terrain: {...envSettings.terrain!, height: parseInt(e.target.value)}})}
-                              className="w-full accent-neon-blue"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 uppercase tracking-wider flex justify-between">
-                              Terrain Scale <span>{envSettings.terrain.scale}</span>
-                            </label>
-                            <input 
-                              type="range"
-                              min="5"
-                              max="100"
-                              value={envSettings.terrain.scale}
-                              onChange={(e) => setEnvSettings({...envSettings, terrain: {...envSettings.terrain!, scale: parseInt(e.target.value)}})}
-                              className="w-full accent-neon-blue"
-                            />
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-gray-400 uppercase tracking-wider">Wireframe</span>
-                            <div 
-                              onClick={() => setEnvSettings({...envSettings, terrain: {...envSettings.terrain!, wireframe: !envSettings.terrain?.wireframe}})}
-                              className={`w-6 h-3 rounded-full relative cursor-pointer transition-colors ${envSettings.terrain?.wireframe ? 'bg-neon-blue' : 'bg-gray-600'}`}
-                            >
-                              <div className={`absolute top-0.5 w-2 h-2 bg-white rounded-full transition-transform ${envSettings.terrain?.wireframe ? 'right-0.5' : 'left-0.5'}`}></div>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-gray-400 uppercase tracking-wider">Animate</span>
-                            <div 
-                              onClick={() => setEnvSettings({...envSettings, terrain: {...envSettings.terrain!, animate: !envSettings.terrain?.animate}})}
-                              className={`w-6 h-3 rounded-full relative cursor-pointer transition-colors ${envSettings.terrain?.animate ? 'bg-neon-blue' : 'bg-gray-600'}`}
-                            >
-                              <div className={`absolute top-0.5 w-2 h-2 bg-white rounded-full transition-transform ${envSettings.terrain?.animate ? 'right-0.5' : 'left-0.5'}`}></div>
-                            </div>
-                          </div>
-                          {envSettings.terrain?.animate && (
-                            <div className="space-y-1">
-                              <label className="text-[10px] text-gray-400 uppercase tracking-wider flex justify-between">
-                                Animation Speed <span>{envSettings.terrain.speed}</span>
-                              </label>
-                              <input 
-                                type="range"
-                                min="0.1"
-                                max="2"
-                                step="0.1"
-                                value={envSettings.terrain.speed}
-                                onChange={(e) => setEnvSettings({...envSettings, terrain: {...envSettings.terrain!, speed: parseFloat(e.target.value)}})}
-                                className="w-full accent-neon-blue"
-                              />
-                            </div>
-                          )}
-                          <div className="space-y-1">
-                            <label className="text-[10px] text-gray-400 uppercase tracking-wider">Terrain Color</label>
-                            <input 
-                              type="color"
-                              value={envSettings.terrain.color}
-                              onChange={(e) => setEnvSettings({...envSettings, terrain: {...envSettings.terrain!, color: e.target.value}})}
-                              className="w-full h-6 bg-space-800 border border-white/10 rounded cursor-pointer"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
 
                     <div className="mt-2 text-[10px] text-neon-blue space-y-1 bg-space-900/50 p-2 rounded border border-neon-blue/20">
                       <p>• Right-click and drag to look around.</p>
@@ -2197,6 +2312,18 @@ export function App() {
           </DraggableWindow>
         )}
 
+        {activeWindows.includes('gameSandbox') && (
+          <DraggableWindow 
+            title="IAMGame Engine Sandbox" 
+            onClose={() => toggleWindow('gameSandbox')} 
+            defaultPosition={{ x: 50, y: 50 }}
+          >
+            <div className="w-[1100px] h-[700px]">
+              <GameSandbox />
+            </div>
+          </DraggableWindow>
+        )}
+
         <AnimatePresence>
           {contextMenu.visible && (
             <motion.div
@@ -2213,6 +2340,12 @@ export function App() {
                   className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-blue rounded transition-colors"
                 >
                   <Plus size={14} /> Add New Node
+                </button>
+                <button 
+                  onClick={() => { toggleWindow('gameSandbox'); closeContextMenu(); }}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-pink rounded transition-colors"
+                >
+                  <Zap size={14} /> Game Engine Sandbox
                 </button>
                 <button 
                   onClick={() => { toggleWindow('terminal'); closeContextMenu(); }}
@@ -2264,13 +2397,25 @@ export function App() {
                 socketRef.current?.emit('update-node', { id, updates });
               }}
               onConnectNodes={(source, target) => {
-                const conn = { id: `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, source, target };
+                const conn = { id: uuidv4(), source, target };
                 setConnections(prev => prev.some(c => c.id === conn.id) ? prev : [...prev, conn]);
                 socketRef.current?.emit('create-connection', conn);
               }}
+              onGenerateEnvironment={handleGenerateEnvironment}
             />
           )}
         </AnimatePresence>
+
+        {/* Floating Game Engine Button */}
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => toggleWindow('gameSandbox')}
+          className="fixed bottom-6 right-6 z-[100] w-14 h-14 bg-neon-pink rounded-full shadow-lg shadow-neon-pink/20 flex items-center justify-center text-white border border-white/20"
+          title="Open Game Engine Sandbox"
+        >
+          <Zap size={24} fill="currentColor" />
+        </motion.button>
       </AnimatePresence>
     </main>
   );
