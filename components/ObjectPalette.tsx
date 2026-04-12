@@ -48,6 +48,13 @@ export const ObjectPalette: React.FC<ObjectPaletteProps> = ({ onAddObject }) => 
           <Plus size={16} />
           <span className="text-[10px] font-bold uppercase">Add AI Generator</span>
         </button>
+        <button
+          onClick={() => onAddObject('zim')}
+          className="w-full py-3 glass-morphism rounded-xl border border-neon-pink/30 hover:border-neon-pink text-neon-pink flex items-center justify-center gap-2 transition-all group mt-2"
+        >
+          <Plus size={16} />
+          <span className="text-[10px] font-bold uppercase">Add ZIM Interactive</span>
+        </button>
       </div>
     </div>
   );

@@ -115,17 +115,17 @@ export const CameraController: React.FC<CameraControllerProps> = ({ selectedNode
       ref={controlsRef}
       makeDefault 
       enableDamping 
-      dampingFactor={0.08} // Slightly higher damping for a more premium feel
-      rotateSpeed={isMobile ? 0.6 : 0.8} 
-      zoomSpeed={isMobile ? 1.0 : 1.2}
-      panSpeed={isMobile ? 0.8 : 1.0}
+      dampingFactor={0.05} // Lower damping factor for smoother, more fluid movement
+      rotateSpeed={isMobile ? 0.8 : 1.0} // Increased responsiveness
+      zoomSpeed={isMobile ? 1.5 : 2.0} // Increased zoom sensitivity
+      panSpeed={isMobile ? 1.0 : 1.2} // Increased pan responsiveness
       screenSpacePanning={true}
       enablePan={!isDraggingNode}
       enableRotate={!isDraggingNode}
-      minDistance={10}
-      maxDistance={800}
+      minDistance={5} // Closer minimum distance
+      maxDistance={1000} // Further maximum distance
       minPolarAngle={0}
-      maxPolarAngle={Math.PI * 0.95}
+      maxPolarAngle={Math.PI} // Allow full rotation
     />
   );
 };

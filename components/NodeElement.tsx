@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { ZimEditorModal } from './ZimEditorModal';
+import { MatrixBackground } from '../src/components/MatrixBackground';
+import { PlayCanvasNodeContent } from './PlayCanvasNodeContent';
 import { GameNodeContent } from './GameNodeContent';
 import { SearchNodeContent } from './SearchNodeContent';
 import { PollinationsNodeContent } from './PollinationsNodeContent';
@@ -9,7 +12,7 @@ import * as Widgets from './Widgets';
 import * as MoreWidgets from './MoreWidgets';
 import { generateZimCode } from '../services/geminiService';
 
-export type NodeType = 'core' | 'image' | 'video' | 'gif' | 'code' | 'text' | '3d' | 'search' | 'webpage' | 'embed' | 'zim' | 'widget' | 'pollinations' | 'game';
+export type NodeType = 'core' | 'image' | 'video' | 'gif' | 'code' | 'text' | '3d' | 'search' | 'webpage' | 'embed' | 'zim' | 'widget' | 'pollinations' | 'game' | 'playcanvas';
 
 export type MotionType = 'none' | 'orbit' | 'random' | 'zigzag' | 'pop' | 'bounce' | 'slow_trail' | 'figure_eight' | 'pendulum' | 'spiral' | 'heartbeat' | 'wave' | 'breathe' | 'flicker' | 'glitch' | 'orbit_elliptical' | 'spring' | 'orbit_figure_eight' | 'chase' | 'flee' | 'wander' | 'pulse_wave' | 'spin_cycle' | 'orbit_eccentric' | 'gravity_well' | 'magnetic' | 'repel' | 'orbit_wobble' | 'tornado' | 'float_away' | 'sink' | 'teleport';
 
@@ -43,6 +46,8 @@ export interface NodeData {
   isLocked?: boolean;
   loopType?: 'none' | 'pingpong' | 'repeat' | 'oscillate';
   gamingEffect?: 'none' | 'neon_pulse' | 'glitch_static' | 'particle_trail' | 'hologram_flicker';
+  defaultOpen?: boolean;
+  isFrameVisible?: boolean;
 }
 
 interface NodeElementProps {
@@ -87,13 +92,17 @@ export function NodeElement({
   const [showMenu, setShowMenu] = useState(false);
   const [menuTab, setMenuTab] = useState<'main' | 'animate' | 'transform'>('main');
   const [lastPinchDist, setLastPinchDist] = useState<number | null>(null);
+  const [isZimModalOpen, setIsZimModalOpen] = useState(node.defaultOpen || false);
   const [isEditingZim, setIsEditingZim] = useState(false);
   const [isGeneratingZim, setIsGeneratingZim] = useState(false);
   const [zimCode, setZimCode] = useState(node.content || '');
 
   React.useEffect(() => {
-    setZimCode(node.content || '');
-  }, [node.content]);
+    if (node.defaultOpen) {
+      setIsZimModalOpen(true);
+      onUpdateNode?.(node.id, { defaultOpen: false });
+    }
+  }, [node.defaultOpen, node.id, onUpdateNode]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
@@ -507,66 +516,48 @@ export function NodeElement({
 </html>`;
 
         content = (
-          <div className={`p-2 w-80 ${isMinimized ? 'h-auto' : 'h-64'} shadow-lg transition-all hover:border-neon-pink flex flex-col ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
-            <div className="flex items-center justify-between mb-2 px-1">
-              <div className="flex items-center gap-2 pointer-events-none">
-                <Activity size={12} className="text-neon-pink" />
-                <h3 className="text-xs font-bold text-white truncate">{node.title || 'ZIM Interactive'}</h3>
+          <div className={`${node.isFrameVisible === false ? '' : 'p-2 w-80'} ${isMinimized ? 'h-auto' : 'h-64'} ${node.isFrameVisible === false ? '' : 'shadow-lg transition-all hover:border-neon-pink flex flex-col'} ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
+            {node.isFrameVisible !== false && (
+              <div className="flex items-center justify-between mb-2 px-1">
+                <div className="flex items-center gap-2 pointer-events-none">
+                  <Activity size={12} className="text-neon-pink" />
+                  <h3 className="text-xs font-bold text-white truncate">{node.title || 'ZIM Interactive'}</h3>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onPointerDownCapture={(e) => e.stopPropagation()} onClick={(e) => { 
+                    e.stopPropagation(); 
+                    setIsGeneratingZim(true);
+                    generateZimCode(`Suggest ZIMjs code for: ${node.title}`).then(code => {
+                        onUpdateNode?.(node.id, { content: code });
+                        setIsGeneratingZim(false);
+                    }).catch(e => {
+                        console.error("AI Suggestion failed:", e);
+                        setIsGeneratingZim(false);
+                    });
+                  }} className="text-gray-400 hover:text-neon-pink p-1 pointer-events-auto" title="AI Suggestion">
+                    {isGeneratingZim ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  </button>
+                  <button onPointerDownCapture={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setIsZimModalOpen(true); }} className="text-gray-400 hover:text-white p-1 pointer-events-auto" title="Edit Code">
+                    <Code size={12} />
+                  </button>
+                  <button onPointerDownCapture={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized); }} className="text-gray-400 hover:text-white p-1 pointer-events-auto" title={isMinimized ? "Maximize" : "Minimize"}>
+                    {isMinimized ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
+                  </button>
+                  <button onPointerDownCapture={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onDelete?.(node.id); }} className="text-gray-400 hover:text-red-500 p-1 pointer-events-auto" title="Close">
+                    <X size={12} />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <button onPointerDownCapture={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setIsEditingZim(!isEditingZim); }} className={`text-gray-400 hover:text-white p-1 pointer-events-auto ${isEditingZim ? 'text-neon-pink' : ''}`} title="Edit Code">
-                  <Code size={12} />
-                </button>
-                <button onPointerDownCapture={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized); }} className="text-gray-400 hover:text-white p-1 pointer-events-auto" title={isMinimized ? "Maximize" : "Minimize"}>
-                  {isMinimized ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
-                </button>
-                <button onPointerDownCapture={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onDelete?.(node.id); }} className="text-gray-400 hover:text-red-500 p-1 pointer-events-auto" title="Close">
-                  <X size={12} />
-                </button>
-              </div>
-            </div>
+            )}
             {!isMinimized && (
-              <div className="flex-1 bg-space-900/50 rounded border border-white/10 overflow-hidden relative pointer-events-auto flex flex-col" onPointerDownCapture={(e) => e.stopPropagation()} onWheelCapture={(e) => e.stopPropagation()}>
-                {isEditingZim ? (
-                  <div className="flex flex-col h-full p-2 gap-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] text-gray-400 uppercase tracking-wider">ZIMjs Code</span>
-                      <button 
-                        onClick={async () => {
-                          if (!node.title) return;
-                          setIsGeneratingZim(true);
-                          const code = await generateZimCode(node.title);
-                          setZimCode(code);
-                          if (onUpdateNode) onUpdateNode(node.id, { content: code });
-                          setIsGeneratingZim(false);
-                        }}
-                        disabled={isGeneratingZim || !node.title}
-                        className="text-[10px] bg-neon-purple/20 text-neon-purple px-2 py-0.5 rounded hover:bg-neon-purple/40 disabled:opacity-50 flex items-center gap-1 transition-all"
-                      >
-                        {isGeneratingZim ? <RefreshCw size={10} className="animate-spin" /> : <Sparkles size={10} />}
-                        AI Assist
-                      </button>
-                    </div>
-                    <textarea 
-                      value={zimCode}
-                      onChange={(e) => setZimCode(e.target.value)}
-                      onBlur={() => {
-                        if (onUpdateNode && zimCode !== node.content) {
-                          onUpdateNode(node.id, { content: zimCode });
-                        }
-                      }}
-                      className="flex-1 w-full bg-black/50 border border-white/10 rounded p-2 text-[10px] font-mono text-neon-blue focus:outline-none focus:border-neon-pink resize-none custom-scrollbar"
-                      placeholder="new Circle(100, 'purple').center().drag();"
-                    />
-                  </div>
-                ) : (
+              <div className={`flex-1 ${node.isFrameVisible === false ? '' : 'bg-space-900/50 rounded border border-white/10'} overflow-hidden relative pointer-events-auto flex flex-col`} onPointerDownCapture={(e) => e.stopPropagation()} onWheelCapture={(e) => e.stopPropagation()}>
+                  <MatrixBackground />
                   <iframe 
                     srcDoc={zimSrcDoc}
                     title={node.title || 'ZIM'}
-                    className="w-full h-full border-0 bg-transparent"
+                    className="w-full h-full border-0 bg-transparent absolute inset-0"
                     sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
                   />
-                )}
               </div>
             )}
           </div>
@@ -577,6 +568,13 @@ export function NodeElement({
         content = (
           <div className={`p-0 w-80 h-80 shadow-2xl transition-all ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
             <GameNodeContent node={node} onUpdateNode={onUpdateNode} />
+          </div>
+        );
+        break;
+      case 'playcanvas':
+        content = (
+          <div className={`p-0 w-80 h-80 shadow-2xl transition-all ${isSelected ? 'selected-node' : ''} ${is3D ? 'pointer-events-none' : ''}`}>
+            <PlayCanvasNodeContent node={node} onUpdateNode={onUpdateNode} />
           </div>
         );
         break;
@@ -684,6 +682,12 @@ export function NodeElement({
         onSelect(node.id);
         setShowMenu(true);
       }}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        if (node.type === 'zim') {
+          setIsZimModalOpen(true);
+        }
+      }}
       initial={disableDrag ? {} : { x: node.x, y: node.y, z: node.z || 0, scale: node.scale || 1, opacity: node.opacity ?? 1, rotateX: node.rotationX || 0, rotateY: node.rotationY || 0, rotateZ: node.rotationZ || 0 }}
       animate={disableDrag ? {} : getAnimationProps()}
       transition={getTransitionProps()}
@@ -715,6 +719,14 @@ export function NodeElement({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
+      {isZimModalOpen && (
+        <ZimEditorModal 
+          node={node} 
+          isOpen={isZimModalOpen} 
+          onClose={() => setIsZimModalOpen(false)} 
+          onUpdateNode={onUpdateNode!} 
+        />
+      )}
       {renderContent()}
 
       {isSelected && !is3D && (
@@ -804,8 +816,8 @@ export function NodeElement({
                     <button onClick={() => onUpdateNode?.(node.id, { animationState: 'stopped', animation: 'none' })} className={`p-1 rounded ${node.animationState === 'stopped' ? 'bg-red-500/20 text-red-400' : 'hover:bg-white/10 text-gray-400'}`}><Square size={12} /></button>
                   </div>
                 </div>
-                <div className="flex gap-1 justify-center">
-                  {(['spin', 'shake', 'wobble', 'pulse', 'float'] as const).map(anim => (
+                <div className="flex gap-1 justify-center flex-wrap">
+                  {(['spin', 'shake', 'wobble', 'pulse', 'float', 'orbit', 'dance', 'jiggle', 'bounce', 'rocket', 'explode'] as const).map(anim => (
                     <button 
                       key={`anim-${node.id}-${anim}`}
                       onClick={() => onUpdateNode?.(node.id, { animation: anim, animationState: 'playing' })}
@@ -861,6 +873,14 @@ export function NodeElement({
             )}
           </div>
         </motion.div>
+      )}
+      {isZimModalOpen && (
+        <ZimEditorModal 
+          node={node} 
+          isOpen={isZimModalOpen} 
+          onClose={() => setIsZimModalOpen(false)} 
+          onUpdateNode={onUpdateNode!} 
+        />
       )}
     </motion.div>
   );

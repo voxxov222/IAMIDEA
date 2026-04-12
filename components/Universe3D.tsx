@@ -6,6 +6,7 @@ import { EffectComposer, Bloom, ChromaticAberration, Noise, Vignette, Glitch } f
 import { NodeElement, NodeData } from './NodeElement';
 import { CameraController } from './CameraController';
 import { TerrainGenerator } from './TerrainGenerator';
+import { ParticleSystem } from './ParticleSystem';
 import * as THREE from 'three';
 import { EnvironmentSettings } from '../types';
 import { BlendFunction } from 'postprocessing';
@@ -1008,6 +1009,8 @@ export function Universe3D(props: Universe3DProps) {
           animate={props.envSettings.terrain?.animate}
           speed={props.envSettings.terrain?.speed}
         />
+        
+        <ParticleSystem count={2000} color={props.envSettings.gridColor || "#00f3ff"} />
         
         <Trails3D nodes={props.nodes} />
         

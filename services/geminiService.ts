@@ -462,6 +462,34 @@ export const generateEnvironmentAI = async (prompt: string): Promise<{ envSettin
   }
 };
 
+export const generateNodesAI = async (prompt: string): Promise<{ nodes: any[]; connections: any[] }> => {
+  const ai = getAI();
+  const systemInstruction = `
+    You are a Graph Architect. The user wants to generate nodes and connections based on a prompt.
+    
+    Return a JSON object with:
+    - nodes: Array of { title: string, type: string, content?: string }
+    - connections: Array of { sourceTitle: string, targetTitle: string }
+    
+    Ensure the output is valid JSON only. Do not wrap in markdown code blocks.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Generate nodes and connections for: ${prompt}`,
+      config: {
+        systemInstruction: systemInstruction,
+        responseMimeType: "application/json",
+      },
+    });
+    return JSON.parse(response.text || '{"nodes": [], "connections": []}');
+  } catch (error) {
+    console.error("Node Generation Error:", error);
+    return { nodes: [], connections: [] };
+  }
+};
+
 export const generateSpeechAI = async (text: string, voice: string = 'Kore'): Promise<string | undefined> => {
   const ai = getAI();
   try {

@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Image as ImageIcon, Video, Type, Code, Link as LinkIcon, Search, Settings, X, Sparkles, Globe, Activity, Terminal, Layout, Mic, Zap, Grid as GridIcon, Layers, Trash2, RefreshCw, Music } from 'lucide-react';
+import { Plus, Image as ImageIcon, Video, Type, Code, Link as LinkIcon, Search, Settings, X, Sparkles, Globe, Activity, Terminal, Layout, Mic, Zap, Grid as GridIcon, Layers, Trash2, RefreshCw, Music, Box } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateProceduralWorld } from './lib/worldGenerator';
 import { DraggableWindow } from './components/DraggableWindow';
+import { WorldGeneratorWindow } from './components/WorldGeneratorWindow';
 import { NodeElement, NodeData, NodeType, MotionType } from './components/NodeElement';
 import { Universe3D } from './components/Universe3D';
 import { CameraControlsOverlay } from './components/CameraControlsOverlay';
 import { io, Socket } from 'socket.io-client';
 import { generateZimCode, generateEnvironmentAI } from './services/geminiService';
+import { MatrixBackground } from './src/components/MatrixBackground';
 import { AITerminal } from './components/AITerminal';
+import { SystemStatusMindMap } from './src/components/SystemStatusMindMap';
 import { VoiceUplink } from './components/VoiceUplink';
 import { GameSandbox } from './components/GameSandbox';
 import { AudioGenerator } from './components/AudioGenerator';
@@ -35,8 +38,8 @@ const DEFAULT_CONNECTIONS: Connection[] = [
 ];
 
 export function App() {
-  const [nodes, setNodes] = useState<NodeData[]>(DEFAULT_NODES);
-  const [connections, setConnections] = useState<Connection[]>(DEFAULT_CONNECTIONS);
+  const [nodes, setNodes] = useState<NodeData[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
 
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [selectedConnection, setSelectedConnection] = useState<string | null>(null);
@@ -62,6 +65,18 @@ export function App() {
       wireframe: true,
       animate: false,
       speed: 0.5
+    },
+    aiPrompt: '',
+    terrainFeatures: {
+      elevation: 0,
+      waterLevel: 0,
+      sandCoverage: 0,
+      rockCoverage: 0,
+      mountainDensity: 0,
+      cityDensity: 0,
+      roadDensity: 0,
+      farmDensity: 0,
+      skyscraperDensity: 0
     }
   });
   
@@ -644,7 +659,9 @@ export function App() {
       color: type === '3d' ? '#10b981' : undefined,
       scale: 1,
       animationState: 'playing',
-      animation: 'none'
+      animation: 'none',
+      defaultOpen: type === 'zim',
+      isFrameVisible: type === 'zim' ? true : undefined
     };
     setNodes(prev => [...prev, newNode]);
     setSelectedNode(newNode.id);
@@ -884,7 +901,8 @@ export function App() {
   };
 
   return (
-    <main 
+    <>
+      <main 
       ref={viewportRef as any}
       className="relative w-full h-full overflow-hidden" 
       data-purpose="3d-universe-viewport"
@@ -1217,6 +1235,10 @@ export function App() {
                 <Zap size={20} />
                 <span className="absolute right-14 bg-space-900 px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap uppercase tracking-widest">Game Sandbox</span>
               </button>
+              <button onClick={() => toggleWindow('systemStatus')} className="glass-morphism w-12 h-12 rounded-full flex items-center justify-center hover:bg-green-500/20 hover:text-green-400 transition-colors group relative">
+                <Activity size={20} />
+                <span className="absolute right-14 bg-space-900 px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap uppercase tracking-widest">System Status</span>
+              </button>
               <button onClick={() => setIsVoiceUplinkOpen(!isVoiceUplinkOpen)} className={`glass-morphism w-12 h-12 rounded-full flex items-center justify-center transition-colors group relative ${isVoiceUplinkOpen ? 'bg-neon-blue/20 text-neon-blue' : 'hover:bg-neon-blue/20 hover:text-neon-blue'}`}>
                 <Mic size={20} />
                 <span className="absolute right-14 bg-space-900 px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap uppercase tracking-widest">Voice Uplink</span>
@@ -1257,11 +1279,16 @@ export function App() {
 
       {/* Draggable Windows */}
       <AnimatePresence>
+        {activeWindows.includes('systemStatus') && (
+          <DraggableWindow title="System Status" onClose={() => toggleWindow('systemStatus')} defaultPosition={{ x: 100, y: 100 }}>
+            <SystemStatusMindMap />
+          </DraggableWindow>
+        )}
         {activeWindows.includes('addNode') && (
           <DraggableWindow title="Add Node" onClose={() => toggleWindow('addNode')} defaultPosition={{ x: Math.max(20, window.innerWidth / 2 - 160), y: 150 }}>
             <div className="space-y-4 w-64">
               <div className="flex gap-2 flex-wrap">
-                {(['text', 'image', 'video', 'code', 'gif', '3d', 'search', 'webpage', 'embed', 'zim', 'widget', 'pollinations', 'game'] as NodeType[]).map(type => (
+                {(['text', 'image', 'video', 'code', 'gif', '3d', 'search', 'webpage', 'embed', 'zim', 'widget', 'pollinations', 'game', 'playcanvas'] as NodeType[]).map(type => (
                   <button 
                     key={`type-${type}`}
                     onClick={() => setNewNodeType(type)}
@@ -1280,6 +1307,7 @@ export function App() {
                     {type === 'widget' && <Layout size={16} />}
                     {type === 'pollinations' && <Zap size={16} />}
                     {type === 'game' && <Zap size={16} />}
+                    {type === 'playcanvas' && <Box size={16} />}
                   </button>
                 ))}
               </div>
@@ -1467,9 +1495,9 @@ export function App() {
                         { name: 'Events', code: 'new Rectangle(200, 200, blue).center().tap(e => { e.target.color = e.target.color == blue ? green : blue; S.update(); });' },
                         { name: '3D Spin', code: 'new Rectangle(200, 200, orange).center().drag().animate({props:{rotY:360, rotX:360}, time:5, loop:true, ease:"linear"});' },
                         { name: '3D Cube', code: 'new Box(150, 150, 150, green).center().drag();' }
-                      ].map(template => (
+                      ].map((template, i) => (
                         <button
-                          key={template.name}
+                          key={`template-${i}`}
                           onClick={() => {
                             setNewNodeContent(template.code);
                             if (!newNodeTitle) setNewNodeTitle(template.name);
@@ -1658,9 +1686,9 @@ export function App() {
                             { name: 'Events', code: 'new Rectangle(200, 200, blue).center().tap(e => { e.target.color = e.target.color == blue ? green : blue; S.update(); });' },
                             { name: '3D Spin', code: 'new Rectangle(200, 200, orange).center().drag().animate({props:{rotY:360, rotX:360}, time:5, loop:true, ease:"linear"});' },
                             { name: '3D Cube', code: 'new Box(150, 150, 150, green).center().drag();' }
-                          ].map(template => (
+                          ].map((template, i) => (
                             <button
-                              key={template.name}
+                              key={`edit-template-${i}`}
                               onClick={() => {
                                 setEditNodeContent(template.code);
                                 if (!editNodeTitle) setEditNodeTitle(template.name);
@@ -1849,108 +1877,145 @@ export function App() {
         )}
 
         {activeWindows.includes('worldGen') && (
-          <DraggableWindow title="World Generator" onClose={() => toggleWindow('worldGen')} defaultPosition={{ x: 150, y: 200 }}>
-            <div className="w-72 space-y-4">
-              <p className="text-[10px] text-gray-400 uppercase tracking-wider">Procedural Universe Creation</p>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <button 
-                  onClick={() => {
-                    const { nodes: newNodes, connections: newConns } = generateProceduralWorld('grid', 16);
-                    setNodes(prev => {
-                      const combined = [...prev, ...newNodes];
-                      return Array.from(new Map(combined.map(n => [n.id, n])).values());
-                    });
-                    setConnections(prev => {
-                      const combined = [...prev, ...newConns];
-                      return Array.from(new Map(combined.map(c => [c.id, c])).values());
-                    });
-                    // Sync with server
-                    newNodes.forEach(n => socketRef.current?.emit('create-node', n));
-                    newConns.forEach(c => socketRef.current?.emit('create-connection', c));
-                  }}
-                  className="flex flex-col items-center gap-2 p-3 bg-white/5 hover:bg-neon-blue/20 border border-white/10 hover:border-neon-blue/50 rounded transition-all group"
-                >
-                  <GridIcon size={24} className="text-gray-400 group-hover:text-neon-blue" />
-                  <span className="text-[10px] text-gray-300 uppercase">Grid Matrix</span>
-                </button>
+          <DraggableWindow title="World Generator" onClose={() => toggleWindow('worldGen')} defaultPosition={{ x: 50, y: 50 }}>
+            <WorldGeneratorWindow 
+              onClose={() => toggleWindow('worldGen')} 
+              onUpdateEnv={(envSettings, nodes) => {
+                if (envSettings) {
+                  setEnvSettings(prev => ({ ...prev, ...envSettings }));
+                }
+                if (nodes && Array.isArray(nodes)) {
+                  const newNodes = nodes.map(n => ({
+                    ...n,
+                    id: uuidv4(),
+                    x: Math.random() * 1000 - 500,
+                    y: Math.random() * 1000 - 500,
+                    z: Math.random() * 1000 - 500,
+                  }));
+                  setNodes(prev => [...prev, ...newNodes]);
+                }
+              }} 
+              onAddNodes={(nodes, connections) => {
+                const newNodes = nodes.map(n => ({
+                  ...n,
+                  id: uuidv4(),
+                  x: Math.random() * 1000 - 500,
+                  y: Math.random() * 1000 - 500,
+                  z: Math.random() * 1000 - 500,
+                }));
+                setNodes(prev => [...prev, ...newNodes]);
                 
-                <button 
-                  onClick={() => {
-                    const { nodes: newNodes, connections: newConns } = generateProceduralWorld('sphere', 24);
-                    setNodes(prev => {
-                      const combined = [...prev, ...newNodes];
-                      return Array.from(new Map(combined.map(n => [n.id, n])).values());
-                    });
-                    setConnections(prev => {
-                      const combined = [...prev, ...newConns];
-                      return Array.from(new Map(combined.map(c => [c.id, c])).values());
-                    });
-                    // Sync with server
-                    newNodes.forEach(n => socketRef.current?.emit('create-node', n));
-                    newConns.forEach(c => socketRef.current?.emit('create-connection', c));
-                  }}
-                  className="flex flex-col items-center gap-2 p-3 bg-white/5 hover:bg-neon-purple/20 border border-white/10 hover:border-neon-purple/50 rounded transition-all group"
-                >
-                  <Globe size={24} className="text-gray-400 group-hover:text-neon-purple" />
-                  <span className="text-[10px] text-gray-300 uppercase">Orbital Sphere</span>
-                </button>
+                const newConnections = connections.map(c => {
+                  const sourceNode = newNodes.find(n => n.title === c.sourceTitle);
+                  const targetNode = newNodes.find(n => n.title === c.targetTitle);
+                  return {
+                    id: uuidv4(),
+                    source: sourceNode?.id || '',
+                    target: targetNode?.id || '',
+                  };
+                }).filter(c => c.source && c.target);
                 
-                <button 
-                  onClick={() => {
-                    const { nodes: newNodes, connections: newConns } = generateProceduralWorld('fractal', 1);
-                    setNodes(prev => {
-                      const combined = [...prev, ...newNodes];
-                      return Array.from(new Map(combined.map(n => [n.id, n])).values());
-                    });
-                    setConnections(prev => {
-                      const combined = [...prev, ...newConns];
-                      return Array.from(new Map(combined.map(c => [c.id, c])).values());
-                    });
-                    // Sync with server
-                    newNodes.forEach(n => socketRef.current?.emit('create-node', n));
-                    newConns.forEach(c => socketRef.current?.emit('create-connection', c));
-                  }}
-                  className="flex flex-col items-center gap-2 p-3 bg-white/5 hover:bg-neon-pink/20 border border-white/10 hover:border-neon-pink/50 rounded transition-all group"
-                >
-                  <Layers size={24} className="text-gray-400 group-hover:text-neon-pink" />
-                  <span className="text-[10px] text-gray-300 uppercase">Fractal Tree</span>
-                </button>
-                
-                <button 
-                  onClick={() => {
-                    const { nodes: newNodes, connections: newConns } = generateProceduralWorld('random', 15);
-                    setNodes(prev => {
-                      const combined = [...prev, ...newNodes];
-                      return Array.from(new Map(combined.map(n => [n.id, n])).values());
-                    });
-                    setConnections(prev => {
-                      const combined = [...prev, ...newConns];
-                      return Array.from(new Map(combined.map(c => [c.id, c])).values());
-                    });
-                    // Sync with server
-                    newNodes.forEach(n => socketRef.current?.emit('create-node', n));
-                    newConns.forEach(c => socketRef.current?.emit('create-connection', c));
-                  }}
-                  className="flex flex-col items-center gap-2 p-3 bg-white/5 hover:bg-emerald-500/20 border border-white/10 hover:border-emerald-500/50 rounded transition-all group"
-                >
-                  <Zap size={24} className="text-gray-400 group-hover:text-emerald-400" />
-                  <span className="text-[10px] text-gray-300 uppercase">Chaos Cluster</span>
-                </button>
-              </div>
-
-              <div className="p-3 bg-space-900/50 rounded border border-white/5 text-[10px] text-gray-400 italic">
-                Procedural generation uses mathematical algorithms to create complex structures instantly.
-              </div>
-
+                setConnections(prev => [...prev, ...newConnections]);
+              }}
+            />
+            <p className="text-[10px] text-gray-400 uppercase tracking-wider">Procedural Universe Creation</p>
+            <div className="grid grid-cols-2 gap-2">
               <button 
-                onClick={handleResetUniverse}
-                className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-[10px] uppercase tracking-widest rounded transition-colors flex items-center justify-center gap-2"
+                onClick={() => {
+                  const { nodes: newNodes, connections: newConns } = generateProceduralWorld('grid', 16);
+                  setNodes(prev => {
+                    const combined = [...prev, ...newNodes];
+                    return Array.from(new Map(combined.map(n => [n.id, n])).values());
+                  });
+                  setConnections(prev => {
+                    const combined = [...prev, ...newConns];
+                    return Array.from(new Map(combined.map(c => [c.id, c])).values());
+                  });
+                  // Sync with server
+                  newNodes.forEach(n => socketRef.current?.emit('create-node', n));
+                  newConns.forEach(c => socketRef.current?.emit('create-connection', c));
+                }}
+                className="flex flex-col items-center gap-2 p-3 bg-white/5 hover:bg-neon-blue/20 border border-white/10 hover:border-neon-blue/50 rounded transition-all group"
               >
-                <Trash2 size={12} />
-                Purge All Nodes
+                <GridIcon size={24} className="text-gray-400 group-hover:text-neon-blue" />
+                <span className="text-[10px] text-gray-300 uppercase">Grid Matrix</span>
+              </button>
+              
+              <button 
+                onClick={() => {
+                  const { nodes: newNodes, connections: newConns } = generateProceduralWorld('sphere', 24);
+                  setNodes(prev => {
+                    const combined = [...prev, ...newNodes];
+                    return Array.from(new Map(combined.map(n => [n.id, n])).values());
+                  });
+                  setConnections(prev => {
+                    const combined = [...prev, ...newConns];
+                    return Array.from(new Map(combined.map(c => [c.id, c])).values());
+                  });
+                  // Sync with server
+                  newNodes.forEach(n => socketRef.current?.emit('create-node', n));
+                  newConns.forEach(c => socketRef.current?.emit('create-connection', c));
+                }}
+                className="flex flex-col items-center gap-2 p-3 bg-white/5 hover:bg-neon-purple/20 border border-white/10 hover:border-neon-purple/50 rounded transition-all group"
+              >
+                <Globe size={24} className="text-gray-400 group-hover:text-neon-purple" />
+                <span className="text-[10px] text-gray-300 uppercase">Orbital Sphere</span>
+              </button>
+              
+              <button 
+                onClick={() => {
+                  const { nodes: newNodes, connections: newConns } = generateProceduralWorld('fractal', 1);
+                  setNodes(prev => {
+                    const combined = [...prev, ...newNodes];
+                    return Array.from(new Map(combined.map(n => [n.id, n])).values());
+                  });
+                  setConnections(prev => {
+                    const combined = [...prev, ...newConns];
+                    return Array.from(new Map(combined.map(c => [c.id, c])).values());
+                  });
+                  // Sync with server
+                  newNodes.forEach(n => socketRef.current?.emit('create-node', n));
+                  newConns.forEach(c => socketRef.current?.emit('create-connection', c));
+                }}
+                className="flex flex-col items-center gap-2 p-3 bg-white/5 hover:bg-neon-pink/20 border border-white/10 hover:border-neon-pink/50 rounded transition-all group"
+              >
+                <Layers size={24} className="text-gray-400 group-hover:text-neon-pink" />
+                <span className="text-[10px] text-gray-300 uppercase">Fractal Tree</span>
+              </button>
+              
+              <button 
+                onClick={() => {
+                  const { nodes: newNodes, connections: newConns } = generateProceduralWorld('random', 15);
+                  setNodes(prev => {
+                    const combined = [...prev, ...newNodes];
+                    return Array.from(new Map(combined.map(n => [n.id, n])).values());
+                  });
+                  setConnections(prev => {
+                    const combined = [...prev, ...newConns];
+                    return Array.from(new Map(combined.map(c => [c.id, c])).values());
+                  });
+                  // Sync with server
+                  newNodes.forEach(n => socketRef.current?.emit('create-node', n));
+                  newConns.forEach(c => socketRef.current?.emit('create-connection', c));
+                }}
+                className="flex flex-col items-center gap-2 p-3 bg-white/5 hover:bg-emerald-500/20 border border-white/10 hover:border-emerald-500/50 rounded transition-all group"
+              >
+                <Zap size={24} className="text-gray-400 group-hover:text-emerald-400" />
+                <span className="text-[10px] text-gray-300 uppercase">Chaos Cluster</span>
               </button>
             </div>
+
+            <div className="p-3 bg-space-900/50 rounded border border-white/5 text-[10px] text-gray-400 italic">
+              Procedural generation uses mathematical algorithms to create complex structures instantly.
+            </div>
+
+            <button 
+              onClick={handleResetUniverse}
+              className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-[10px] uppercase tracking-widest rounded transition-colors flex items-center justify-center gap-2"
+            >
+              <Trash2 size={12} />
+              Purge All Nodes
+            </button>
           </DraggableWindow>
         )}
 
@@ -1980,33 +2045,6 @@ export function App() {
         {activeWindows.includes('settings') && (
           <DraggableWindow title="Environment Settings" onClose={() => toggleWindow('settings')} defaultPosition={{ x: 100, y: 200 }}>
             <div className="w-72 space-y-6 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
-              {/* AI Generation Section */}
-              <div className="space-y-3 bg-neon-blue/5 p-3 rounded-lg border border-neon-blue/20">
-                <p className="text-[10px] text-neon-blue uppercase tracking-wider font-bold flex items-center gap-2">
-                  <Sparkles size={12} /> AI World Architect
-                </p>
-                <div className="relative">
-                  <textarea 
-                    value={envPrompt}
-                    onChange={(e) => setEnvPrompt(e.target.value)}
-                    placeholder="Describe your world (e.g. 'A neon cyberpunk city with floating sentinels')..."
-                    className="w-full bg-space-900 border border-white/10 rounded p-2 text-xs text-white focus:outline-none focus:border-neon-blue min-h-[60px] resize-none"
-                  />
-                  <button 
-                    onClick={() => handleGenerateEnvironment()}
-                    disabled={isGeneratingEnv || !envPrompt.trim()}
-                    className={`absolute bottom-2 right-2 p-1.5 rounded transition-all ${isGeneratingEnv ? 'bg-gray-600 cursor-not-allowed' : 'bg-neon-blue hover:bg-neon-blue/80 text-white shadow-[0_0_10px_rgba(0,210,255,0.5)]'}`}
-                  >
-                    {isGeneratingEnv ? (
-                      <RefreshCw size={14} className="animate-spin" />
-                    ) : (
-                      <Zap size={14} />
-                    )}
-                  </button>
-                </div>
-                <p className="text-[9px] text-gray-500 italic">Generates environment settings and 3D characters.</p>
-              </div>
-
               {/* Object Library Section */}
               <div className="pt-4 border-t border-white/10">
                 <ObjectPalette onAddObject={handleAddObject} />
@@ -2298,6 +2336,51 @@ export function App() {
                       </div>
                     </div>
 
+                    {/* AI Environment Generation */}
+                    <div className="space-y-2 pt-4 border-t border-white/10">
+                      <p className="text-[10px] text-neon-blue uppercase tracking-wider font-bold">AI Environment Generator</p>
+                      <textarea
+                        value={envSettings.aiPrompt || ''}
+                        onChange={(e) => setEnvSettings({...envSettings, aiPrompt: e.target.value})}
+                        placeholder="Describe your environment (e.g., 'A desert landscape with a river and a small city')"
+                        className="w-full bg-space-800 border border-white/10 rounded p-2 text-xs text-white focus:outline-none focus:border-neon-blue"
+                        rows={3}
+                      />
+                      <button
+                        onClick={() => handleGenerateEnvironment(envSettings.aiPrompt)}
+                        className="w-full py-2 bg-neon-blue/20 text-neon-blue border border-neon-blue/30 rounded text-xs font-bold hover:bg-neon-blue/30 transition-all"
+                      >
+                        Generate Environment
+                      </button>
+                    </div>
+
+                    {/* Terrain Features */}
+                    <div className="space-y-4 pt-4 border-t border-white/10">
+                      <p className="text-[10px] text-neon-pink uppercase tracking-wider font-bold">Terrain Features</p>
+                      {Object.keys(envSettings.terrainFeatures || {}).map((feature) => (
+                        <div key={feature} className="space-y-1">
+                          <label className="text-[10px] text-gray-400 uppercase tracking-wider flex justify-between capitalize">
+                            {feature.replace(/([A-Z])/g, ' $1')} <span>{envSettings.terrainFeatures?.[feature as keyof typeof envSettings.terrainFeatures]}</span>
+                          </label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.1"
+                            value={envSettings.terrainFeatures?.[feature as keyof typeof envSettings.terrainFeatures] || 0}
+                            onChange={(e) => setEnvSettings({
+                              ...envSettings,
+                              terrainFeatures: {
+                                ...envSettings.terrainFeatures!,
+                                [feature]: parseFloat(e.target.value)
+                              }
+                            })}
+                            className="w-full accent-neon-pink"
+                          />
+                        </div>
+                      ))}
+                    </div>
+
                     <div className="space-y-2 border-t border-white/10 pt-4">
                       <label className="text-[10px] text-gray-400 uppercase tracking-wider">Universe Management</label>
                   <button 
@@ -2324,99 +2407,94 @@ export function App() {
           </DraggableWindow>
         )}
 
-        <AnimatePresence>
-          {contextMenu.visible && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              style={{ top: contextMenu.y, left: contextMenu.x }}
-              className="fixed z-[200] w-48 bg-space-900 border border-white/10 rounded-lg shadow-2xl overflow-hidden backdrop-blur-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-1">
-                <button 
-                  onClick={() => { toggleWindow('addNode'); closeContextMenu(); }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-blue rounded transition-colors"
-                >
-                  <Plus size={14} /> Add New Node
-                </button>
-                <button 
-                  onClick={() => { toggleWindow('gameSandbox'); closeContextMenu(); }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-pink rounded transition-colors"
-                >
-                  <Zap size={14} /> Game Engine Sandbox
-                </button>
-                <button 
-                  onClick={() => { toggleWindow('terminal'); closeContextMenu(); }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-blue rounded transition-colors"
-                >
-                  <Terminal size={14} /> Open AI Terminal
-                </button>
-                <button 
-                  onClick={() => { setIs3D(!is3D); closeContextMenu(); }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-blue rounded transition-colors"
-                >
-                  <Globe size={14} /> {is3D ? 'Switch to 2D' : 'Switch to 3D'}
-                </button>
-                <div className="h-px bg-white/5 my-1" />
-                <button 
-                  onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); closeContextMenu(); }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-blue rounded transition-colors"
-                >
-                  <Layout size={14} /> Reset View
-                </button>
-                <button 
-                  onClick={() => { toggleWindow('settings'); closeContextMenu(); }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-blue rounded transition-colors"
-                >
-                  <Settings size={14} /> Settings
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {contextMenu.visible && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            className="fixed z-[200] w-48 bg-space-900 border border-white/10 rounded-lg shadow-2xl overflow-hidden backdrop-blur-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-1">
+              <button 
+                onClick={() => { toggleWindow('addNode'); closeContextMenu(); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-blue rounded transition-colors"
+              >
+                <Plus size={14} /> Add New Node
+              </button>
+              <button 
+                onClick={() => { toggleWindow('gameSandbox'); closeContextMenu(); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-pink rounded transition-colors"
+              >
+                <Zap size={14} /> Game Engine Sandbox
+              </button>
+              <button 
+                onClick={() => { toggleWindow('terminal'); closeContextMenu(); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-blue rounded transition-colors"
+              >
+                <Terminal size={14} /> Open AI Terminal
+              </button>
+              <button 
+                onClick={() => { setIs3D(!is3D); closeContextMenu(); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-blue rounded transition-colors"
+              >
+                <Globe size={14} /> {is3D ? 'Switch to 2D' : 'Switch to 3D'}
+              </button>
+              <div className="h-px bg-white/5 my-1" />
+              <button 
+                onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); closeContextMenu(); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-blue rounded transition-colors"
+              >
+                <Layout size={14} /> Reset View
+              </button>
+              <button 
+                onClick={() => { toggleWindow('settings'); closeContextMenu(); }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 hover:text-neon-blue rounded transition-colors"
+              >
+                <Settings size={14} /> Settings
+              </button>
+            </div>
+          </motion.div>
+        )}
 
-        <AnimatePresence>
-          {activeWindows.includes('terminal') && (
-            <AITerminal 
-              onClose={() => toggleWindow('terminal')}
-              nodes={nodes}
-              connections={connections}
-              onAddNode={(node) => {
-                setNodes(prev => prev.some(n => n.id === node.id) ? prev : [...prev, node]);
-                socketRef.current?.emit('create-node', node);
-              }}
-              onDeleteNode={(id) => {
-                setNodes(prev => prev.filter(n => n.id !== id));
-                setConnections(prev => prev.filter(c => c.source !== id && c.target !== id));
-                socketRef.current?.emit('delete-node', id);
-              }}
-              onUpdateNode={(id, updates) => {
-                setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
-                socketRef.current?.emit('update-node', { id, updates });
-              }}
-              onConnectNodes={(source, target) => {
-                const conn = { id: uuidv4(), source, target };
-                setConnections(prev => prev.some(c => c.id === conn.id) ? prev : [...prev, conn]);
-                socketRef.current?.emit('create-connection', conn);
-              }}
-              onGenerateEnvironment={handleGenerateEnvironment}
-            />
-          )}
-        </AnimatePresence>
-
-        {/* Floating Game Engine Button */}
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={() => toggleWindow('gameSandbox')}
-          className="fixed bottom-6 right-6 z-[100] w-14 h-14 bg-neon-pink rounded-full shadow-lg shadow-neon-pink/20 flex items-center justify-center text-white border border-white/20"
-          title="Open Game Engine Sandbox"
-        >
-          <Zap size={24} fill="currentColor" />
-        </motion.button>
+        {activeWindows.includes('terminal') && (
+          <AITerminal 
+            onClose={() => toggleWindow('terminal')}
+            nodes={nodes}
+            connections={connections}
+            onAddNode={(node) => {
+              setNodes(prev => prev.some(n => n.id === node.id) ? prev : [...prev, node]);
+              socketRef.current?.emit('create-node', node);
+            }}
+            onDeleteNode={(id) => {
+              setNodes(prev => prev.filter(n => n.id !== id));
+              setConnections(prev => prev.filter(c => c.source !== id && c.target !== id));
+              socketRef.current?.emit('delete-node', id);
+            }}
+            onUpdateNode={(id, updates) => {
+              setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
+              socketRef.current?.emit('update-node', { id, updates });
+            }}
+            onConnectNodes={(source, target) => {
+              const conn = { id: uuidv4(), source, target };
+              setConnections(prev => prev.some(c => c.id === conn.id) ? prev : [...prev, conn]);
+              socketRef.current?.emit('create-connection', conn);
+            }}
+            onGenerateEnvironment={handleGenerateEnvironment}
+          />
+        )}
       </AnimatePresence>
     </main>
-  );
+    <motion.button
+      whileHover={{ scale: 1.1 }}
+      whileTap={{ scale: 0.9 }}
+      onClick={() => toggleWindow('gameSandbox')}
+      className="fixed bottom-6 right-6 z-[100] w-14 h-14 bg-neon-pink rounded-full shadow-lg shadow-neon-pink/20 flex items-center justify-center text-white border border-white/20"
+      title="Open Game Engine Sandbox"
+    >
+      <Zap size={24} fill="currentColor" />
+    </motion.button>
+  </>
+);
 }

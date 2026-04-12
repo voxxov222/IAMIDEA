@@ -75,6 +75,15 @@ export const LiveStreamDeck: React.FC<LiveStreamDeckProps> = ({ widgets, onAddWi
         return <div className="text-white p-4">Unknown Widget Type: {widget.type}</div>;
     };
 
+    // DEBUG: Check for duplicate keys
+    useEffect(() => {
+        const ids = widgets.map(w => w.id);
+        const uniqueIds = new Set(ids);
+        if (ids.length !== uniqueIds.size) {
+            console.error("Duplicate widget IDs found:", ids.filter((id, index) => ids.indexOf(id) !== index));
+        }
+    }, [widgets]);
+
     // --- GLOBAL MOUSE/TOUCH HANDLERS ---
     useEffect(() => {
         const handleMove = (clientX: number, clientY: number) => {
@@ -365,7 +374,7 @@ export const LiveStreamDeck: React.FC<LiveStreamDeckProps> = ({ widgets, onAddWi
                 className="absolute top-0 left-0 w-full h-full origin-top-left"
                 style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
             >
-                {widgets.map(widget => (
+                {widgets.map((widget, index) => (
                     <div 
                         key={widget.id}
                         style={{ 

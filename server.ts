@@ -4,6 +4,9 @@ import { Server } from "socket.io";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import multer from 'multer';
+import FormData from 'form-data';
+import axios from 'axios';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +15,46 @@ async function startServer() {
   const app = express();
   const httpServer = createServer(app);
   const PORT = 3000;
+  const upload = multer({ storage: multer.memoryStorage() });
+
+  app.post('/api/rodin', upload.any(), async (req, res) => {
+    const formData = new FormData();
+    
+    if (req.files) {
+      (req.files as Express.Multer.File[]).forEach(file => {
+        formData.append('images', file.buffer, file.originalname);
+      });
+    }
+    
+    for (const key in req.body) {
+      formData.append(key, req.body[key]);
+    }
+    
+    try {
+      const response = await axios.post('https://api.hyper3d.com/api/v2/rodin', formData, {
+        headers: {
+          ...formData.getHeaders(),
+          'Authorization': `Bearer ${process.env.RODIN_API_KEY}`
+        }
+      });
+      res.json(response.data);
+    } catch (error: any) {
+      res.status(error.response?.status || 500).json(error.response?.data || { message: 'Failed to generate 3D model' });
+    }
+  });
+
+  app.get('/api/rodin/status/:uuid', async (req, res) => {
+    try {
+      const response = await axios.get(`https://api.hyper3d.com/api/v2/rodin/status/${req.params.uuid}`, {
+        headers: {
+          'Authorization': `Bearer ${process.env.RODIN_API_KEY}`
+        }
+      });
+      res.json(response.data);
+    } catch (error: any) {
+      res.status(error.response?.status || 500).json(error.response?.data || { message: 'Failed to check status' });
+    }
+  });
 
   // In-memory state for nodes and connections
   // Persisted to state.json

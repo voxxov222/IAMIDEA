@@ -33,7 +33,7 @@ export const AudioVisualizerWidget = ({ widget }: { widget: DashboardWidget }) =
   return (
     <BaseWidget title="Audio Sync" icon={Activity} color="neon-pink">
       <div className="flex items-end gap-1 h-full w-full px-2">
-        {bars.map((h, i) => <div key={`bar-${i}`} className="flex-1 bg-neon-pink/50 transition-all duration-100" style={{ height: `${h}%` }} />)}
+        {bars.map((h, i) => <div key={`${widget.id}-bar-${i}`} className="flex-1 bg-neon-pink/50 transition-all duration-100" style={{ height: `${h}%` }} />)}
       </div>
     </BaseWidget>
   );
@@ -167,7 +167,7 @@ export const RevenueChartWidget = ({ widget }: { widget: DashboardWidget }) => (
   <BaseWidget title="Revenue" icon={DollarSign} color="emerald-400">
     <div className="w-full h-full flex items-end gap-1 px-2 pb-2">
       {[40, 60, 45, 80, 65, 90, 100].map((h, i) => (
-        <div key={`rev-${i}`} className="flex-1 bg-emerald-500/50 rounded-t" style={{ height: `${h}%` }} />
+        <div key={`${widget.id}-rev-${i}`} className="flex-1 bg-emerald-500/50 rounded-t" style={{ height: `${h}%` }} />
       ))}
     </div>
   </BaseWidget>
@@ -245,7 +245,7 @@ export const LatencyGraphWidget = ({ widget }: { widget: DashboardWidget }) => {
   return (
     <BaseWidget title="Latency History" icon={Activity} color="purple-400">
       <div className="w-full h-full flex items-end gap-[1px] px-1">
-        {data.map((h, i) => <div key={`lat-${i}`} className="flex-1 bg-purple-500/50" style={{ height: `${h}%` }} />)}
+        {data.map((h, i) => <div key={`${widget.id}-lat-${i}`} className="flex-1 bg-purple-500/50" style={{ height: `${h}%` }} />)}
       </div>
     </BaseWidget>
   );

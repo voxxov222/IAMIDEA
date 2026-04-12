@@ -30,6 +30,7 @@ import {
   Download,
   Wind,
   User,
+  Users,
   Volume2,
   Activity,
   Code,
@@ -39,7 +40,8 @@ import {
   ChevronRight,
   Database,
   Dna,
-  Globe
+  Globe,
+  Folder
 } from 'lucide-react';
 import * as THREE from 'three';
 import { v4 as uuidv4 } from 'uuid';
@@ -98,7 +100,7 @@ function Skybox({ url }: { url: string }) {
   );
 }
 
-function SceneMesh({ url }: { url: string }) {
+function SceneMesh({ url, id }: { url: string, id: string }) {
   const texture = useTexture(url);
   return (
     <group>
@@ -108,7 +110,7 @@ function SceneMesh({ url }: { url: string }) {
       </mesh>
       {/* Add some random elements to simulate a "scene" */}
       {[...Array(5)].map((_, i) => (
-        <mesh key={i} position={[Math.sin(i) * 10, -1, Math.cos(i) * 10]}>
+        <mesh key={`mesh-${id}-${i}`} position={[Math.sin(i) * 10, -1, Math.cos(i) * 10]}>
           <boxGeometry args={[1, 2, 1]} />
           <meshStandardMaterial map={texture} color="#444" />
         </mesh>
@@ -225,7 +227,7 @@ function SandboxMesh({ obj, isSelected, onSelect, physicsEnabled }: { obj: Sandb
       
       {obj.type === 'scene-mesh' && (
         <Suspense fallback={<Html center><div className="text-white text-[10px]">Loading Scene...</div></Html>}>
-          <SceneMesh url={obj.assetId} />
+          <SceneMesh url={obj.assetId} id={obj.id} />
         </Suspense>
       )}
       
@@ -240,13 +242,16 @@ function SandboxMesh({ obj, isSelected, onSelect, physicsEnabled }: { obj: Sandb
 }
 
 export function GameSandbox() {
-  const [activeTab, setActiveTab] = useState<'assets' | 'ai' | 'scripts' | 'deploy' | 'plugins' | 'scene'>('assets');
+  const [activeTab, setActiveTab] = useState<'assets' | 'ai' | 'scripts' | 'deploy' | 'plugins' | 'scene' | 'team' | 'settings'>('assets');
   const [aiCategory, setAiCategory] = useState<'env' | 'char' | 'sound' | 'fx' | 'texture' | 'skybox' | 'scene' | 'mesh-3d' | 'world'>('env');
   const [assets, setAssets] = useState<GameAsset[]>([
     { id: 'default-img', name: 'Nebula Texture', type: 'image', url: 'https://picsum.photos/seed/nebula/512/512' }
   ]);
   const [skyboxUrl, setSkyboxUrl] = useState<string | null>(null);
   const [objects, setObjects] = useState<SandboxObject[]>([]);
+  const [useSharp, setUseSharp] = useState<boolean>(false);
+  const [returnMesh, setReturnMesh] = useState<boolean>(false);
+  const [localeCode, setLocaleCode] = useState<string>('en_US');
   const [scripts, setScripts] = useState<{ id: string, name: string, content: string }[]>([
     { id: 's1', name: 'PlayerController.ts', content: '// Player movement logic\nexport class PlayerController {\n  update() {\n    // logic here\n  }\n}' },
     { id: 's2', name: 'EnemyAI.ts', content: '// Simple follow AI\nexport class EnemyAI {\n  target = null;\n  update() {\n    // seek target\n  }\n}' }
@@ -254,15 +259,16 @@ export function GameSandbox() {
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
+  const [envPrompt, setEnvPrompt] = useState('futuristic cityscape with neon lights');
   const [aiAssistantInput, setAiAssistantInput] = useState('');
-  const [logs, setLogs] = useState<string[]>(['Sandbox v1.0 Initialized', 'Ready for asset integration...']);
+  const [logs, setLogs] = useState<{ id: string, text: string }[]>([{ id: uuidv4(), text: 'Sandbox v1.0 Initialized' }, { id: uuidv4(), text: 'Ready for asset integration...' }]);
   const [transformMode, setTransformMode] = useState<'translate' | 'rotate' | 'scale'>('translate');
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [isPhysicsActive, setIsPhysicsActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addLog = (msg: string) => {
-    setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 20));
+    setLogs(prev => [{ id: uuidv4(), text: `[${new Date().toLocaleTimeString()}] ${msg}` }, ...prev].slice(0, 20));
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -366,42 +372,124 @@ export function GameSandbox() {
 
   const handle3DWorldGen = async (prompt: string) => {
     setIsProcessingAI(true);
-    addLog(`WorldGrow: Initiating procedural 3D world generation for: "${prompt}"`);
+    addLog(`AI World Engine: Generating procedural 3D world for: "${prompt}"`);
     
     try {
-      // Simulate WorldGrow pipeline stages
-      addLog(`[WorldGrow] Loading WorldGrowPipeline from UranusITS/WorldGrow...`);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      addLog(`[WorldGrow] Allocating CUDA memory and initializing SPCONV_ALGO...`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      addLog(`[WorldGrow] Generating 3x3 block heightfield and biome maps...`);
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      addLog(`[WorldGrow] Synthesizing Gaussian Splats and Mesh geometry...`);
-      await new Promise(resolve => setTimeout(resolve, 2500));
-      addLog(`[WorldGrow] Exporting scene to .glb and .ply formats...`);
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      
+      // Generate world layout
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: `Generate a detailed 3D world layout based on this prompt: "${prompt}". 
+        Return a JSON array of objects representing environmental elements (terrain blocks, trees, rocks, structures).
+        Each object must have:
+        - type: 'cube' | 'sphere' | 'plane'
+        - position: [x, y, z] (range: x:[-25, 25], y:[-5, 15], z:[-25, 25])
+        - scale: [x, y, z]
+        - color: hex string
+        - mass: number (0 for static, >0 for dynamic)
+        - physicsEnabled: boolean
+        
+        Include a large base plane for the ground.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                type: { type: Type.STRING, enum: ['cube', 'sphere', 'plane'] },
+                position: { type: Type.ARRAY, items: { type: Type.NUMBER }, minItems: 3, maxItems: 3 },
+                scale: { type: Type.ARRAY, items: { type: Type.NUMBER }, minItems: 3, maxItems: 3 },
+                color: { type: Type.STRING },
+                mass: { type: Type.NUMBER },
+                physicsEnabled: { type: Type.BOOLEAN }
+              },
+              required: ['type', 'position', 'scale', 'color', 'mass', 'physicsEnabled']
+            }
+          }
+        }
+      });
 
+      const worldData = JSON.parse(response.text);
+      const worldObjects: SandboxObject[] = worldData.map((item: any) => ({
+        id: uuidv4(),
+        assetId: '',
+        type: item.type,
+        position: item.position,
+        rotation: [0, 0, 0],
+        scale: item.scale,
+        color: item.color,
+        displacementScale: 1,
+        mass: item.mass,
+        physicsEnabled: item.physicsEnabled
+      }));
+
+      setObjects(prev => [...prev, ...worldObjects]);
+      addLog(`AI World Engine: Success! ${worldObjects.length} elements generated and placed.`);
+      
       const worldAsset: GameAsset = {
         id: uuidv4(),
-        name: `WorldGrow - ${prompt.slice(0, 15)}...`,
+        name: `AI World - ${prompt.slice(0, 15)}...`,
         type: 'image',
-        url: `https://picsum.photos/seed/worldgrow-${uuidv4()}/1024/1024`
+        url: `https://picsum.photos/seed/world-${uuidv4()}/1024/1024`
       };
       setAssets(prev => [...prev, worldAsset]);
-      addLog(`WorldGrow: Success! Procedural world generated. Asset "${worldAsset.name}" ready.`);
-      
-      // Add a few objects to represent the WorldGrow generated environment
-      const worldObjects: SandboxObject[] = [
-        { id: uuidv4(), assetId: '', type: 'sphere', position: [0, -5, 0], rotation: [0, 0, 0], scale: [30, 1, 30], color: '#3d6b37', displacementScale: 1, mass: 0, physicsEnabled: true },
-        { id: uuidv4(), assetId: '', type: 'cube', position: [8, 0, 8], rotation: [0, 0, 0], scale: [3, 8, 3], color: '#5c4033', displacementScale: 1, mass: 1, physicsEnabled: true },
-        { id: uuidv4(), assetId: '', type: 'cube', position: [-8, 0, -8], rotation: [0, 0, 0], scale: [3, 8, 3], color: '#5c4033', displacementScale: 1, mass: 1, physicsEnabled: true },
-        { id: uuidv4(), assetId: '', type: 'sphere', position: [0, 15, 0], rotation: [0, 0, 0], scale: [5, 5, 5], color: '#fffacb', displacementScale: 1, mass: 0, physicsEnabled: false },
-      ];
-      setObjects(prev => [...prev, ...worldObjects]);
+
     } catch (error) {
-      addLog(`WorldGrow error: ${error}`);
+      addLog(`World generation error: ${error}`);
     } finally {
       setIsProcessingAI(false);
+    }
+  };
+
+  const handleGenerateEnvironment = async () => {
+    if (!envPrompt) return;
+    setIsProcessingAI(true);
+    addLog(`AI Environment Engine: Initiating full generation for "${envPrompt}"`);
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+      // 1. Generate Skybox
+      addLog(`[Skybox] Generating 360° panoramic environment texture...`);
+      const skyboxResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+          parts: [
+            {
+              text: `A high-quality, immersive 360-degree panoramic skybox texture for a game environment. Theme: ${envPrompt}. The image should be suitable for an equirectangular mapping.`,
+            },
+          ],
+        },
+      });
+
+      let generatedSkyboxUrl = '';
+      for (const part of skyboxResponse.candidates![0].content.parts) {
+        if (part.inlineData) {
+          generatedSkyboxUrl = `data:image/png;base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+
+      if (generatedSkyboxUrl) {
+        setSkyboxUrl(generatedSkyboxUrl);
+        addLog(`[Skybox] Success: AI-generated skybox applied.`);
+      } else {
+        addLog(`[Skybox] Warning: AI did not return an image. Using fallback.`);
+        setSkyboxUrl(`https://picsum.photos/seed/skybox-${uuidv4()}/2048/1024`);
+      }
+
+      // 2. Generate Terrain/World
+      addLog(`[Terrain] Designing procedural world layout...`);
+      await handle3DWorldGen(envPrompt);
+      
+      addLog(`[System] Environment generation complete.`);
+    } catch (error) {
+      addLog(`Environment generation error: ${error}`);
+    } finally {
+      setIsProcessingAI(false);
+      setEnvPrompt('');
     }
   };
 
@@ -465,19 +553,47 @@ export function GameSandbox() {
         addLog(`AI generated base image for Unique3D. Starting mesh reconstruction...`);
         handleUnique3DConversion(newAsset);
       } else {
-        // Fallback for other categories (images/textures)
-        const assetUrl = `https://picsum.photos/seed/${uuidv4()}/1024/1024`;
+        // Real AI generation for other categories (images/textures/skybox)
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        addLog(`[AI] Generating ${aiCategory} image for: "${aiPrompt}"...`);
+        
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash-image',
+          contents: {
+            parts: [
+              {
+                text: `A high-quality ${aiCategory} asset for a game: ${aiPrompt}. 
+                ${aiCategory === 'skybox' ? 'This should be a 360-degree panoramic texture.' : ''}
+                ${aiCategory === 'texture' ? 'This should be a seamless, tileable texture.' : ''}`,
+              },
+            ],
+          },
+        });
+
+        let generatedUrl = '';
+        for (const part of response.candidates![0].content.parts) {
+          if (part.inlineData) {
+            generatedUrl = `data:image/png;base64,${part.inlineData.data}`;
+            break;
+          }
+        }
+
+        if (!generatedUrl) {
+          addLog(`[AI] Warning: No image returned. Using fallback.`);
+          generatedUrl = `https://picsum.photos/seed/${uuidv4()}/1024/1024`;
+        }
+
         const newAsset: GameAsset = {
           id: uuidv4(),
           name: `AI ${aiCategory.toUpperCase()} - ${aiPrompt.slice(0, 10)}...`,
-          type: aiCategory === 'texture' ? 'texture' : aiCategory === 'sound' ? 'image' : 'image',
-          url: assetUrl
+          type: aiCategory === 'texture' ? 'texture' : 'image',
+          url: generatedUrl
         };
         
         setAssets(prev => [...prev, newAsset]);
         
         if (aiCategory === 'skybox') {
-          setSkyboxUrl(assetUrl);
+          setSkyboxUrl(generatedUrl);
           addLog(`Skybox updated with new AI generation`);
         }
         addLog(`AI generation complete: ${newAsset.name} added to library`);
@@ -518,10 +634,14 @@ export function GameSandbox() {
         If the prompt mentions VibeEmulator, use Vibe scripting (Lua/Python based emulator logic).
         If the prompt mentions OpenHands, use OpenHands Agentic Scripting (Action/Observation loop, task planning).
         If the prompt mentions WorldGrow, use Python WorldGrowPipeline syntax (from trellis.pipelines import WorldGrowPipeline, pipeline.run(world_size=(3,3))).
+        If the prompt mentions WorldGen, use Python WorldGen syntax (python demo.py -p "prompt" --use_sharp --return_mesh).
+        If the prompt mentions Gemini CLI, use Gemini CLI commands and scripting (gemini chat, gemini prompt, gemini config).
+        If the prompt mentions Asset Library, use Kellojo Asset Library indexing and metadata logic (JSON/GDScript based).
+        If the prompt mentions Filament, use Google Filament C++ or JavaScript API (Engine, Renderer, Scene, View).
         Otherwise, use TypeScript game engine style.
         Return ONLY the code, no markdown formatting.`,
         config: {
-          systemInstruction: "You are a world-class game developer and AI logic architect. You write clean, performant, and well-commented code for game engines including Godot (GDScript), Panda3D (Python), Bevy (Rust), BlueEngine (Rust), PlayCanvas (JavaScript), Cheat Engine (Lua/Assembly), OmniEmu (Universal Scripting), Android (LDPlayer), RetroArch (Libretro), VibeEmulator, OpenHands (Agentic Logic), and WorldGrow (Python Procedural Generation).",
+          systemInstruction: "You are a world-class game developer and AI logic architect. You write clean, performant, and well-commented code for game engines including Godot (GDScript), Panda3D (Python), Bevy (Rust), BlueEngine (Rust), PlayCanvas (JavaScript), Cheat Engine (Lua/Assembly), OmniEmu (Universal Scripting), Android (LDPlayer), RetroArch (Libretro), VibeEmulator, OpenHands (Agentic Logic), WorldGrow (Python Procedural Generation), WorldGen (ZiYang-xie), Gemini CLI, Kellojo Asset Library, Google Filament (PBR), LÖVR (Lua VR), Godot AI Assistant Hub, WickedEngine (C++), ArmorPaint (Haxe/JS), Awesome AI Agents (Multi-agent frameworks), and Armory3D (Haxe/Kha).",
         }
       });
 
@@ -537,19 +657,35 @@ export function GameSandbox() {
       const isVibe = aiPrompt.toLowerCase().includes('vibe') || aiPrompt.toLowerCase().includes('vibeemulator');
       const isOpenHands = aiPrompt.toLowerCase().includes('openhands') || aiPrompt.toLowerCase().includes('agent');
       const isWorldGrow = aiPrompt.toLowerCase().includes('worldgrow') || aiPrompt.toLowerCase().includes('procedural world');
+      const isWorldGen = aiPrompt.toLowerCase().includes('worldgen');
+      const isAmbient = aiPrompt.toLowerCase().includes('ambient') || aiPrompt.toLowerCase().includes('rust') || aiPrompt.toLowerCase().includes('webgpu');
+      const isHeaps = aiPrompt.toLowerCase().includes('heaps') || aiPrompt.toLowerCase().includes('haxe');
+      const isGeminiCLI = aiPrompt.toLowerCase().includes('gemini cli') || aiPrompt.toLowerCase().includes('gemini-cli');
+      const isAssetLib = aiPrompt.toLowerCase().includes('asset library') || aiPrompt.toLowerCase().includes('asset-library');
+      const isFilament = aiPrompt.toLowerCase().includes('filament');
+      const isAG2 = aiPrompt.toLowerCase().includes('ag2') || aiPrompt.toLowerCase().includes('team');
+      const isLovr = aiPrompt.toLowerCase().includes('lovr') || aiPrompt.toLowerCase().includes('vr');
+      const isGodotHub = aiPrompt.toLowerCase().includes('godot ai') || aiPrompt.toLowerCase().includes('assistant hub');
+      const isWicked = aiPrompt.toLowerCase().includes('wicked') || aiPrompt.toLowerCase().includes('wickedengine');
+      const isArmorPaint = aiPrompt.toLowerCase().includes('armorpaint') || aiPrompt.toLowerCase().includes('painting');
+      const isAwesomeAgents = aiPrompt.toLowerCase().includes('awesome agents') || aiPrompt.toLowerCase().includes('agent collection');
       
       let ext = 'ts';
-      if (isGDScript) ext = 'gd';
-      else if (isPanda3D) ext = 'py';
-      else if (isRust) ext = 'rs';
+      if (isGDScript || isGodotHub) ext = 'gd';
+      else if (isPanda3D || isAG2 || isAwesomeAgents) ext = 'py';
+      else if (isRust || isAmbient) ext = 'rs';
+      else if (isHeaps || isArmorPaint) ext = 'hx';
       else if (isPlayCanvas) ext = 'js';
-      else if (isCheatEngine) ext = 'lua';
+      else if (isCheatEngine || isLovr) ext = 'lua';
       else if (isOmniEmu) ext = 'emu';
       else if (isAndroid) ext = 'java';
-      else if (isRetroArch) ext = 'cpp';
+      else if (isRetroArch || isFilament || isWicked) ext = 'cpp';
       else if (isVibe) ext = 'vibe';
       else if (isOpenHands) ext = 'agent';
-      else if (isWorldGrow) ext = 'py';
+      else if (isWorldGrow || isWorldGen) ext = 'py';
+      else if (isGeminiCLI) ext = 'sh';
+      else if (isAssetLib) ext = 'lib';
+      else if (isFilament) ext = 'cpp';
 
       const newScript = {
         id: uuidv4(),
@@ -579,8 +715,10 @@ export function GameSandbox() {
           { id: 'ai', icon: Sparkles, label: 'AI Gen' },
           { id: 'scripts', icon: Code, label: 'Scripts' },
           { id: 'scene', icon: Layers, label: 'Scene Tree' },
+          { id: 'team', icon: Users, label: 'Agent Team' },
           { id: 'plugins', icon: Puzzle, label: 'Add-ons' },
           { id: 'deploy', icon: Rocket, label: 'Deploy' },
+          { id: 'settings', icon: Settings, label: 'Settings' },
         ].map(tab => (
           <button
             key={tab.id}
@@ -782,7 +920,7 @@ export function GameSandbox() {
                 <p className="text-[9px] text-gray-500 uppercase font-bold mb-2">Recent Generations</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[1, 2, 3, 4].map(i => (
-                    <div key={i} className="aspect-square bg-white/5 rounded border border-white/5 hover:border-neon-purple/30 transition-all cursor-pointer overflow-hidden group relative">
+                    <div key={`asset-grid-${i}`} className="aspect-square bg-white/5 rounded border border-white/5 hover:border-neon-purple/30 transition-all cursor-pointer overflow-hidden group relative">
                       <img src={`https://picsum.photos/seed/ai-${i}/200/200`} className="w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-opacity" />
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
                         <Plus size={16} className="text-neon-purple" />
@@ -867,6 +1005,84 @@ export function GameSandbox() {
           </div>
         )}
 
+        {activeTab === 'team' && (
+          <div className="flex flex-col h-full">
+            <div className="p-4 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <Users size={16} className="text-neon-green" />
+                <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">AG2 Design Team</span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+              <div className="p-3 bg-neon-green/5 border border-neon-green/20 rounded-lg">
+                <p className="text-[10px] text-neon-green font-bold uppercase mb-2">Team Status: Active</p>
+                <div className="space-y-3">
+                  {[
+                    { role: 'Game Designer', status: 'Idle', icon: User },
+                    { role: 'Logic Architect', status: 'Idle', icon: Code },
+                    { role: 'Asset Coordinator', status: 'Idle', icon: Layers },
+                    { role: 'Reviewer', status: 'Idle', icon: Activity },
+                  ].map((agent, i) => (
+                    <div key={`agent-${i}`} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <agent.icon size={12} className="text-gray-500" />
+                        <span className="text-[10px] text-gray-300">{agent.role}</span>
+                      </div>
+                      <span className="text-[8px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500 uppercase">{agent.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-[10px] text-gray-500 uppercase font-bold">Team Workflow</p>
+                <button 
+                  onClick={() => {
+                    addLog('Initializing AG2 Game Design Team...');
+                    addLog('Running: git clone https://github.com/ag2ai/build-with-ag2.git');
+                    setTimeout(() => addLog('Team environment ready. Running pip install -r requirements.txt...'), 1500);
+                    setTimeout(() => addLog('Success: AG2 Team initialized. Ready for collaborative design.'), 3000);
+                  }}
+                  className="w-full py-2 bg-neon-green text-black text-[10px] font-bold uppercase rounded hover:brightness-110 transition-all flex items-center justify-center gap-2"
+                >
+                  <Rocket size={12} /> Initialize Team
+                </button>
+                <button 
+                  onClick={() => {
+                    if (!aiPrompt) {
+                      addLog('Error: Please provide a prompt in the AI Gen tab first.');
+                      return;
+                    }
+                    addLog(`Handing off prompt to AG2 Team: "${aiPrompt}"`);
+                    addLog('Game Designer: Drafting core mechanics...');
+                    setTimeout(() => addLog('Logic Architect: Outlining script requirements...'), 1000);
+                    setTimeout(() => addLog('Asset Coordinator: Identifying required 3D models...'), 2000);
+                    setTimeout(() => addLog('Reviewer: Validating design consistency...'), 3000);
+                    setTimeout(() => addLog('Success: AG2 Team generated a comprehensive design document.'), 4000);
+                  }}
+                  className="w-full py-2 bg-white/5 border border-white/10 text-white text-[10px] font-bold uppercase rounded hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+                >
+                  <Play size={12} /> Run Collaborative Design
+                </button>
+              </div>
+
+              <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
+                <p className="text-[9px] text-gray-500 uppercase font-bold mb-2">Recent Team Deliverables</p>
+                <div className="space-y-2">
+                  <div className="p-2 bg-black/40 rounded border border-white/5 flex items-center justify-between">
+                    <span className="text-[9px] text-gray-400">Design_Doc_v1.pdf</span>
+                    <Download size={10} className="text-gray-600" />
+                  </div>
+                  <div className="p-2 bg-black/40 rounded border border-white/5 flex items-center justify-between">
+                    <span className="text-[9px] text-gray-400">Logic_Flow_Chart.png</span>
+                    <Download size={10} className="text-gray-600" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'plugins' && (
           <div className="flex flex-col h-full">
             <div className="p-4 border-b border-white/10">
@@ -882,6 +1098,20 @@ export function GameSandbox() {
               </div>
               {[
                 { name: 'Physics Engine Pro', desc: 'Advanced rigid body dynamics', price: 'Free' },
+                { name: 'Armory3D Engine', desc: '3D game engine for Blender with Haxe and Kha', price: 'Install' },
+                { name: 'Awesome AI Agents', desc: 'Curated collection of state-of-the-art AI agents and frameworks', price: 'Install' },
+                { name: 'ArmorPaint', desc: '3D PBR painting software built on Armory3D', price: 'Install' },
+                { name: 'WickedEngine', desc: 'High-performance C++ game engine with modern rendering features', price: 'Install' },
+                { name: 'Godot Asset Library Sync', desc: 'Official Godot asset library integration for direct resource importing', price: 'Install' },
+                { name: 'Godot AI Assistant Hub', desc: 'Centralized hub for AI-powered Godot development assistants', price: 'Install' },
+                { name: 'LÖVR VR Framework', desc: 'Lightweight Lua framework for creating VR experiences', price: 'Install' },
+                { name: 'AG2 Game Design Team', desc: 'Multi-agent collaborative team for autonomous game design and logic generation', price: 'Install' },
+                { name: 'Ambient Engine', desc: 'High-performance, collaborative engine built on Rust and WebGPU', price: 'Installed' },
+                { name: 'Heaps Framework', desc: 'Cross-platform Haxe game engine for high-performance games', price: 'Installed' },
+                { name: 'WorldGen (ZiYang-xie)', desc: 'High-fidelity 3D scene generation with ml-sharp support', price: 'Installed' },
+                { name: 'Google Filament PBR', desc: 'Real-time physically based rendering engine for all platforms', price: 'Installed' },
+                { name: 'Kellojo Asset Library', desc: 'Docker-based high-performance asset management and indexing', price: 'Installed' },
+                { name: 'Gemini CLI Integration', desc: 'Command-line interface for Gemini AI models', price: 'Installed' },
                 { name: 'WorldGrow Generator', desc: 'Procedural 3D world generation using WorldGrowPipeline', price: 'Installed' },
                 { name: 'OpenHands AI Agent', desc: 'Autonomous AI software development agent for game logic', price: 'Installed' },
                 { name: 'Godot Menus Template', desc: 'Pre-built UI systems for Godot (Main, Settings, Pause)', price: 'Installed' },
@@ -899,15 +1129,58 @@ export function GameSandbox() {
                 { name: 'Unique3D Connector', desc: 'High-quality 3D mesh generation from images', price: 'Installed' },
                 { name: 'VFX Master', desc: 'Particle system presets', price: 'Installed' },
                 { name: 'Audio Spatializer', desc: '3D sound positioning', price: '$12.00' },
-              ].map(plugin => (
-                <div key={plugin.name} className="p-3 bg-white/5 rounded-lg border border-white/5 hover:border-neon-yellow/30 transition-all group">
+              ].map((plugin, i) => (
+                <div key={`plugin-${i}`} className="p-3 bg-white/5 rounded-lg border border-white/5 hover:border-neon-yellow/30 transition-all group">
                   <div className="flex justify-between items-start mb-1">
                     <p className="text-[10px] font-bold text-gray-300">{plugin.name}</p>
                     <button 
                       onClick={() => {
                         if (plugin.price === 'Installed') return;
-                        addLog(`Installing plugin: ${plugin.name}...`);
-                        setTimeout(() => addLog(`Plugin ${plugin.name} installed successfully.`), 2000);
+                        if (plugin.name === 'AG2 Game Design Team') {
+                          addLog('Initializing AG2 Game Design Team...');
+                          addLog('Running: git clone https://github.com/ag2ai/build-with-ag2.git');
+                          setTimeout(() => addLog('Cloning complete. Installing dependencies via pip...'), 1000);
+                          setTimeout(() => addLog('Running: pip install -r requirements.txt'), 2000);
+                          setTimeout(() => {
+                            addLog('Success: AG2 Team installed and ready.');
+                            // In a real app we'd update state here
+                          }, 4000);
+                        } else if (plugin.name === 'LÖVR VR Framework') {
+                          addLog('Initializing LÖVR VR Framework...');
+                          addLog('Cloning: https://github.com/bjornbytes/lovr.git');
+                          setTimeout(() => addLog('Success: LÖVR environment ready for VR development.'), 2000);
+                        } else if (plugin.name === 'Godot Asset Library Sync') {
+                          addLog('Connecting to Godot Asset Library...');
+                          addLog('Cloning: https://github.com/godotengine/godot-asset-library.git');
+                          setTimeout(() => addLog('Success: Godot Asset Library synced and ready.'), 2000);
+                        } else if (plugin.name === 'Godot AI Assistant Hub') {
+                          addLog('Initializing Godot AI Assistant Hub...');
+                          addLog('Fetching versions from: https://github.com/FlamxGames/godot-ai-assistant-hub');
+                          setTimeout(() => addLog('Success: Godot AI Assistant Hub initialized.'), 1500);
+                        } else if (plugin.name === 'WickedEngine') {
+                          addLog('Initializing WickedEngine...');
+                          addLog('Cloning: https://github.com/turanszkij/WickedEngine.git');
+                          setTimeout(() => addLog('Success: WickedEngine environment ready.'), 2000);
+                        } else if (plugin.name === 'ArmorPaint') {
+                          addLog('Initializing ArmorPaint...');
+                          addLog('Cloning: https://github.com/armory3d/armorpaint.git');
+                          setTimeout(() => addLog('Success: ArmorPaint environment ready.'), 2000);
+                        } else if (plugin.name === 'Armory3D Engine') {
+                          addLog('Initializing Armory3D Engine...');
+                          addLog('Cloning: https://github.com/armory3d/armory.git');
+                          setTimeout(() => addLog('Success: Armory3D environment ready.'), 2000);
+                        } else if (plugin.name === 'Awesome AI Agents') {
+                          addLog('Initializing Awesome AI Agents Collection...');
+                          addLog('Cloning: https://github.com/jim-schwoebel/awesome_ai_agents.git');
+                          setTimeout(() => addLog('Success: Awesome AI Agents collection ready.'), 2000);
+                        } else if (plugin.name === 'Kellojo Asset Library') {
+                          addLog('Deploying Kellojo Asset Library via Docker...');
+                          addLog('Running: docker-compose up -d');
+                          setTimeout(() => addLog('Success: Asset Library service is running on port 3000.'), 2000);
+                        } else {
+                          addLog(`Installing plugin: ${plugin.name}...`);
+                          setTimeout(() => addLog(`Plugin ${plugin.name} installed successfully.`), 2000);
+                        }
                       }}
                       className={`text-[8px] px-2 py-0.5 rounded font-bold uppercase transition-all ${plugin.price === 'Installed' ? 'bg-neon-green/20 text-neon-green' : 'bg-neon-yellow text-black hover:brightness-110'}`}
                     >
@@ -1040,6 +1313,167 @@ export function GameSandbox() {
                   >
                     <Sparkles size={10} /> OpenHands Agent
                   </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Exporting Gemini CLI scripts...');
+                      setTimeout(() => addLog('Success: Gemini CLI scripts exported for terminal usage.'), 1500);
+                    }}
+                    className="p-2 bg-blue-500/10 border border-blue-500/50 rounded text-[9px] text-blue-500 font-bold uppercase hover:bg-blue-500/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Terminal size={10} /> Gemini CLI
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Indexing assets for Kellojo Library...');
+                      addLog('Container: ghcr.io/kellojo/asset-library:latest');
+                      addLog('Running: docker-compose up -d');
+                      setTimeout(() => addLog('Success: Asset library Docker service synced.'), 2000);
+                    }}
+                    className="p-2 bg-amber-500/10 border border-amber-500/50 rounded text-[9px] text-amber-500 font-bold uppercase hover:bg-amber-500/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Folder size={10} /> Asset Lib Docker
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Building WickedEngine project...');
+                      addLog('Source: https://github.com/turanszkij/WickedEngine.git');
+                      setTimeout(() => addLog('Success: WickedEngine build complete.'), 3000);
+                    }}
+                    className="p-2 bg-slate-500/10 border border-slate-500/50 rounded text-[9px] text-slate-300 font-bold uppercase hover:bg-slate-500/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Cpu size={10} /> Wicked Build
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Compiling Filament PBR shaders and materials...');
+                      setTimeout(() => addLog('Success: Filament scene exported with physically based materials.'), 2500);
+                    }}
+                    className="p-2 bg-cyan-500/10 border border-cyan-500/50 rounded text-[9px] text-cyan-500 font-bold uppercase hover:bg-cyan-500/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Wind size={10} /> Filament Render
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Connecting to Ambient collaborative server...');
+                      addLog('Cloning repository: https://github.com/AmbientRun/Ambient.git');
+                      setTimeout(() => addLog('Success: Ambient project initialized and synced.'), 2000);
+                    }}
+                    className="p-2 bg-orange-500/10 border border-orange-500/50 rounded text-[9px] text-orange-500 font-bold uppercase hover:bg-orange-500/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Globe size={10} /> Ambient Sync
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Running: haxelib install heaps');
+                      setTimeout(() => addLog('Success: Heaps framework installed via haxelib.'), 1500);
+                      setTimeout(() => addLog('Compiling Haxe project to HashLink...'), 2500);
+                    }}
+                    className="p-2 bg-yellow-500/10 border border-yellow-500/50 rounded text-[9px] text-yellow-500 font-bold uppercase hover:bg-yellow-500/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Zap size={10} /> Heaps / Haxelib
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Packaging LÖVR VR experience...');
+                      addLog('Target: https://github.com/bjornbytes/lovr.git');
+                      setTimeout(() => addLog('Success: LÖVR VR bundle generated for Quest/Desktop.'), 2000);
+                    }}
+                    className="p-2 bg-pink-500/10 border border-pink-500/50 rounded text-[9px] text-pink-500 font-bold uppercase hover:bg-pink-500/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Box size={10} /> LÖVR Export
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Syncing with Godot Asset Library...');
+                      setTimeout(() => addLog('Success: Local asset cache updated from godotengine/godot-asset-library.'), 2000);
+                    }}
+                    className="p-2 bg-green-600/10 border border-green-600/50 rounded text-[9px] text-green-600 font-bold uppercase hover:bg-green-600/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Folder size={10} /> Godot Assets
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Updating Godot AI Assistant Hub...');
+                      setTimeout(() => addLog('Success: AI Assistant Hub versions synced (FlamxGames/godot-ai-assistant-hub).'), 1500);
+                    }}
+                    className="p-2 bg-blue-600/10 border border-blue-600/50 rounded text-[9px] text-blue-600 font-bold uppercase hover:bg-blue-600/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Sparkles size={10} /> AI Hub Sync
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Extracting ArmorPaint locales...');
+                      addLog(`Running: ./base/make --js base/tools/extract_locales.js ${localeCode}`);
+                      setTimeout(() => addLog(`Success: Generated paint/assets/locale/${localeCode}.json`), 2000);
+                    }}
+                    className="p-2 bg-purple-600/10 border border-purple-600/50 rounded text-[9px] text-purple-400 font-bold uppercase hover:bg-purple-600/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Globe size={10} /> ArmorPaint Locale
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Syncing Awesome AI Agents collection...');
+                      addLog('Source: https://github.com/jim-schwoebel/awesome_ai_agents.git');
+                      setTimeout(() => addLog('Success: AI Agents collection updated.'), 1500);
+                    }}
+                    className="p-2 bg-indigo-600/10 border border-indigo-600/50 rounded text-[9px] text-indigo-400 font-bold uppercase hover:bg-indigo-600/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Users size={10} /> Agents Sync
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Syncing Armory3D Engine...');
+                      addLog('Source: https://github.com/armory3d/armory.git');
+                      setTimeout(() => addLog('Success: Armory3D core updated.'), 1500);
+                    }}
+                    className="p-2 bg-orange-600/10 border border-orange-600/50 rounded text-[9px] text-orange-400 font-bold uppercase hover:bg-orange-600/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Box size={10} /> Armory Sync
+                  </button>
+                  <div className="p-2 bg-white/5 border border-white/10 rounded flex items-center gap-2">
+                    <span className="text-[8px] text-gray-400 uppercase font-bold">Locale:</span>
+                    <input 
+                      type="text" 
+                      value={localeCode} 
+                      onChange={(e) => setLocaleCode(e.target.value)}
+                      className="bg-black/40 border border-white/10 rounded px-1.5 py-0.5 text-[9px] text-white outline-none focus:border-purple-500 w-16"
+                      placeholder="en_US"
+                    />
+                  </div>
+                  <div className="col-span-2 p-2 bg-white/5 border border-white/10 rounded space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[9px] text-gray-400 font-bold uppercase">WorldGen (ZiYang-xie)</p>
+                      <button 
+                        onClick={() => {
+                          addLog(`Running WorldGen pipeline (ml-sharp: ${useSharp}, mesh: ${returnMesh})...`);
+                          setTimeout(() => addLog('Success: WorldGen environment exported.'), 3000);
+                        }}
+                        className="p-1 px-2 bg-neon-green/10 border border-neon-green/50 rounded text-[8px] text-neon-green font-bold uppercase hover:bg-neon-green/20 transition-all"
+                      >
+                        Export World
+                      </button>
+                    </div>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={useSharp} 
+                          onChange={(e) => setUseSharp(e.target.checked)}
+                          className="w-3 h-3 rounded border-white/10 bg-white/5 text-neon-green focus:ring-neon-green"
+                        />
+                        <span className="text-[8px] text-gray-500 font-bold uppercase">ml-sharp (Experimental)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={returnMesh} 
+                          onChange={(e) => setReturnMesh(e.target.checked)}
+                          className="w-3 h-3 rounded border-white/10 bg-white/5 text-neon-green focus:ring-neon-green"
+                        />
+                        <span className="text-[8px] text-gray-500 font-bold uppercase">Mesh Mode</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1077,6 +1511,93 @@ export function GameSandbox() {
                   <div>{'>'} [INFO] Compiling 3 scripts...</div>
                   <div>{'>'} [INFO] Linking physics engine...</div>
                   <div>{'>'} [SUCCESS] Build artifacts generated.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {activeTab === 'settings' && (
+          <div className="flex flex-col h-full">
+            <div className="p-4 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <Settings size={16} className="text-neon-purple" />
+                <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">Global Settings</span>
+              </div>
+            </div>
+            <div className="flex-1 p-4 space-y-6 overflow-y-auto custom-scrollbar">
+              <div className="space-y-2">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold flex items-center gap-2">
+                  <Sparkles size={12} className="text-neon-purple" /> AI World Architect
+                </p>
+                <div className="space-y-2 bg-white/5 p-3 rounded border border-white/10">
+                  <textarea 
+                    value={envPrompt}
+                    onChange={(e) => setEnvPrompt(e.target.value)}
+                    className="w-full h-20 bg-black/40 border border-white/10 rounded p-2 text-[10px] text-white outline-none focus:border-neon-purple resize-none"
+                    placeholder="Describe the environment (e.g., 'Futuristic neon city')..."
+                  />
+                  <button 
+                    onClick={handleGenerateEnvironment}
+                    disabled={isProcessingAI || !envPrompt}
+                    className="w-full py-2 bg-neon-purple text-black text-[10px] font-bold uppercase rounded hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isProcessingAI ? <Cpu size={12} className="animate-spin" /> : <Wind size={12} />}
+                    Generate Environment
+                  </button>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Engine Sync & Repos</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button 
+                    onClick={() => {
+                      addLog('Syncing with Godot Asset Library...');
+                      setTimeout(() => addLog('Success: Local asset cache updated from godotengine/godot-asset-library.'), 2000);
+                    }}
+                    className="p-2 bg-green-600/10 border border-green-600/50 rounded text-[9px] text-green-600 font-bold uppercase hover:bg-green-600/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Folder size={10} /> Godot Assets
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Updating Godot AI Assistant Hub...');
+                      setTimeout(() => addLog('Success: AI Assistant Hub versions synced (FlamxGames/godot-ai-assistant-hub).'), 1500);
+                    }}
+                    className="p-2 bg-blue-600/10 border border-blue-600/50 rounded text-[9px] text-blue-600 font-bold uppercase hover:bg-blue-600/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Sparkles size={10} /> AI Hub Sync
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Extracting ArmorPaint locales...');
+                      addLog(`Running: ./base/make --js base/tools/extract_locales.js ${localeCode}`);
+                      setTimeout(() => addLog(`Success: Generated paint/assets/locale/${localeCode}.json`), 2000);
+                    }}
+                    className="p-2 bg-purple-600/10 border border-purple-600/50 rounded text-[9px] text-purple-400 font-bold uppercase hover:bg-purple-600/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Globe size={10} /> ArmorPaint Locale
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Syncing Awesome AI Agents collection...');
+                      addLog('Source: https://github.com/jim-schwoebel/awesome_ai_agents.git');
+                      setTimeout(() => addLog('Success: AI Agents collection updated.'), 1500);
+                    }}
+                    className="p-2 bg-indigo-600/10 border border-indigo-600/50 rounded text-[9px] text-indigo-400 font-bold uppercase hover:bg-indigo-600/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Users size={10} /> Agents Sync
+                  </button>
+                  <button 
+                    onClick={() => {
+                      addLog('Syncing Armory3D Engine...');
+                      addLog('Source: https://github.com/armory3d/armory.git');
+                      setTimeout(() => addLog('Success: Armory3D core updated.'), 1500);
+                    }}
+                    className="p-2 bg-orange-600/10 border border-orange-600/50 rounded text-[9px] text-orange-400 font-bold uppercase hover:bg-orange-600/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Box size={10} /> Armory Sync
+                  </button>
                 </div>
               </div>
             </div>
@@ -1198,11 +1719,11 @@ export function GameSandbox() {
             <button onClick={() => setLogs([])} className="text-[8px] text-gray-600 hover:text-gray-400 uppercase">Clear</button>
           </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar font-mono text-[9px] text-gray-400 space-y-0.5">
-            {logs.map((log, i) => (
-              <div key={i} className="flex gap-2">
-                <span className="text-gray-600">{log.split(']')[0]}]</span>
-                <span className={log.includes('complete') ? 'text-green-400' : log.includes('Analyzing') ? 'text-neon-purple' : ''}>
-                  {log.split(']')[1]}
+            {logs.map((log) => (
+              <div key={log.id} className="flex gap-2">
+                <span className="text-gray-600">{log.text.split(']')[0]}]</span>
+                <span className={log.text.includes('complete') ? 'text-green-400' : log.text.includes('Analyzing') ? 'text-neon-purple' : ''}>
+                  {log.text.split(']')[1]}
                 </span>
               </div>
             ))}

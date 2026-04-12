@@ -108,4 +108,16 @@ export interface EnvironmentSettings {
     animate: boolean;
     speed: number;
   };
+  aiPrompt?: string;
+  terrainFeatures?: {
+    elevation: number;
+    waterLevel: number;
+    sandCoverage: number;
+    rockCoverage: number;
+    mountainDensity: number;
+    cityDensity: number;
+    roadDensity: number;
+    farmDensity: number;
+    skyscraperDensity: number;
+  };
 }

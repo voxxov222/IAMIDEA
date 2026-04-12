@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { Play, Pause, RotateCcw, Maximize2, Minimize2, X, Terminal, Settings, Zap } from 'lucide-react';
 import { NodeData } from './NodeElement';
 
@@ -11,7 +12,10 @@ export function GameNodeContent({ node, onUpdateNode }: GameNodeContentProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [logs, setLogs] = useState<string[]>(['IAMGame Engine v0.1 Initialized', 'Ready for input...']);
+  const [logs, setLogs] = useState<{ id: string, text: string }[]>([
+    { id: uuidv4(), text: 'IAMGame Engine v0.1 Initialized' },
+    { id: uuidv4(), text: 'Ready for input...' }
+  ]);
   const [showTerminal, setShowTerminal] = useState(false);
 
   useEffect(() => {
@@ -75,7 +79,7 @@ export function GameNodeContent({ node, onUpdateNode }: GameNodeContentProps) {
   }, [isPlaying]);
 
   const addLog = (msg: string) => {
-    setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`].slice(-10));
+    setLogs(prev => [...prev, { id: uuidv4(), text: `[${new Date().toLocaleTimeString()}] ${msg}` }].slice(-10));
   };
 
   return (
@@ -187,9 +191,9 @@ export function GameNodeContent({ node, onUpdateNode }: GameNodeContentProps) {
                 <Terminal size={10} className="text-neon-blue" />
                 <span className="text-[8px] font-bold text-gray-500 uppercase tracking-widest">System Logs</span>
               </div>
-              {logs.map((log, i) => (
-                <div key={i} className="text-[9px] font-mono text-gray-400 mb-0.5">
-                  {log}
+              {logs.map((log) => (
+                <div key={log.id} className="text-[9px] font-mono text-gray-400 mb-0.5">
+                  {log.text}
                 </div>
               ))}
             </div>
